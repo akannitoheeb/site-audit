@@ -159,6 +159,9 @@ $('go').onclick=async()=>{
   const timer=setInterval(()=>{m=Math.min(m+1,3);$('go').textContent=msgs[m]},2500);
   try{
     const d=await call('/api/audit',{url:$('url').value,email:$('email').value,social:$('social').value,services:$('services').value});
+    const f=d.found||{};
+    if(!$('email').value&&f.email)$('email').value=f.email;
+    if(!$('social').value){const sc=f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||'';if(sc)$('social').value=sc}
     current={...d,url:$('url').value,email:$('email').value,social:$('social').value};
     $('storeName').textContent=d.storeName||$('url').value;
     $('chips').innerHTML='';const s=d.signals||{};
@@ -167,6 +170,9 @@ $('go').onclick=async()=>{
     chip(s.newsletterOrSubscribeText?'Subscribe text found':'No subscribe text',s.newsletterOrSubscribeText?'ok':'bad');
     chip(s.mobileViewportTag?'Mobile ready':'No mobile tag',s.mobileViewportTag?'ok':'bad');
     chip((s.pageSizeKB||0)+' KB homepage','neu');
+    chip(f.email?'Email found: '+f.email:'No email found on the site',f.email?'ok':'bad');
+    [['instagram','Instagram'],['facebook','Facebook'],['linkedin','LinkedIn'],['tiktok','TikTok'],['x','X'],['whatsapp','WhatsApp']].forEach(([k,n])=>{
+      if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
     $('obs').innerHTML='';
     (d.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
     $('subj').value=d.email?.subject||'';$('body').value=d.email?.body||'';$('dm').value=d.dm||'';$('sendMsg').textContent='';
@@ -176,7 +182,7 @@ $('go').onclick=async()=>{
 };
 
 const sentToday=()=>{const t=store.get('sent',{day:'',n:0});return t.day===new Date().toDateString()?t.n:0};
-$('send').onclick=async()=>{
+$('send').onclick=async()=>{current.email=$('email').value.trim();
   if(!current?.email){$('sendMsg').textContent='Add their email in the form above first.';return}
   if(sentToday()>=CAP){$('sendMsg').textContent='Daily limit reached. Try again tomorrow.';return}
   if(!confirm('Send this email to '+current.email+'?'))return;
@@ -188,7 +194,7 @@ $('send').onclick=async()=>{
 };
 $('copyMail').onclick=()=>{navigator.clipboard.writeText($('subj').value+'\n\n'+$('body').value);toast('Email copied')};
 $('copyDm').onclick=()=>{navigator.clipboard.writeText($('dm').value);toast('DM copied')};
-$('openSocial').onclick=()=>{current?.social?window.open(current.social,'_blank','noopener'):toast('Add their social link first')};
+$('openSocial').onclick=()=>{const u=$('social').value.trim();u?window.open(u,'_blank','noopener'):toast('Add their social link first')};
 $('markDm').onclick=()=>{saveLead('Contacted');toast('Marked as contacted')};
 
 function saveLead(status){
