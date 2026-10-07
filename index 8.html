@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATM Outreach</title>
+<style>
+:root{--bg:#eef2f4;--ink:#14232b;--mute:#5b6b73;--card:#fff;--line:#d3dce0;--acc:#0e6b6b;--acc-ink:#fff;--warn:#a23b2a}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1a1f;--ink:#e6eef1;--mute:#93a4ac;--card:#17262d;--line:#2a3d46;--acc:#4fc3bd;--acc-ink:#07201f;--warn:#ff9b87}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:1.6rem;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:1.05rem;margin:0 0 8px}
+p.sub{margin:0 0 20px;color:var(--mute)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+label{display:block;font-weight:600;font-size:.9rem;margin:12px 0 4px}
+input,textarea,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);font:inherit}
+textarea{min-height:110px;resize:vertical}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:600px){.row{grid-template-columns:1fr}}
+button{font:inherit;font-weight:600;padding:10px 16px;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:var(--acc-ink);cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.5;cursor:wait}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.err{color:var(--warn);margin-top:10px}
+ul{padding-left:18px;margin:0}
+li{margin-bottom:8px}
+li small{display:block;color:var(--mute)}
+.log td,.log th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-size:.9rem}
+.log{width:100%;border-collapse:collapse}
+.scroll{overflow-x:auto}
+[hidden]{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>ATM Outreach</h1>
+  <p class="sub">Paste a store, get an audit and two drafts, then review and send.</p>
+
+  <section class="card">
+    <label for="pw">App password</label>
+    <input id="pw" type="password" autocomplete="current-password">
+    <label for="url">Store link</label>
+    <input id="url" type="url" placeholder="https://examplestore.com">
+    <div class="row">
+      <div><label for="email">Their email (optional)</label><input id="email" type="email"></div>
+      <div><label for="social">Their social link (optional)</label><input id="social" type="url" placeholder="https://instagram.com/..."></div>
+    </div>
+    <label for="services">My services and offers</label>
+    <textarea id="services">Email marketing strategy: welcome flows, abandoned cart emails, campaigns. WordPress web design and store improvements.</textarea>
+    <div class="actions"><button id="go">Audit store</button></div>
+    <div id="err" class="err" role="alert"></div>
+  </section>
+
+  <div id="result" hidden>
+    <section class="card">
+      <h2 id="storeName"></h2>
+      <p id="platform" class="sub"></p>
+      <ul id="obs"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Email draft</h2>
+      <label for="subj">Subject</label><input id="subj">
+      <label for="body">Message</label><textarea id="body"></textarea>
+      <div class="actions">
+        <button id="send">Send email</button>
+        <button class="ghost" id="copyMail">Copy</button>
+      </div>
+      <div id="sendMsg" role="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>DM draft</h2>
+      <textarea id="dm" style="min-height:80px"></textarea>
+      <div class="actions">
+        <button class="ghost" id="copyDm">Copy DM</button>
+        <button class="ghost" id="openSocial">Open their profile</button>
+        <button class="ghost" id="markDm">Mark DM as sent</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Leads</h2>
+    <div class="scroll"><table class="log"><thead><tr><th>Store</th><th>Status</th><th>Follow up</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <p id="empty" class="sub">No leads yet.</p>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const DAILY_CAP = 25;
+let current = null;
+
+const store = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+$('pw').value = store.get('pw', '');
+$('services').value = store.get('services', $('services').value);
+
+async function call(path, payload) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-app-password': $('pw').value },
+    body: JSON.stringify(payload),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Something went wrong');
+  return data;
+}
+
+$('go').onclick = async () => {
+  $('err').textContent = '';
+  store.set('pw', $('pw').value);
+  store.set('services', $('services').value);
+  $('go').disabled = true; $('go').textContent = 'Auditing...';
+  try {
+    const d = await call('/api/audit', { url: $('url').value, email: $('email').value, social: $('social').value, services: $('services').value });
+    current = { ...d, url: $('url').value, email: $('email').value, social: $('social').value };
+    $('storeName').textContent = d.storeName || $('url').value;
+    $('platform').textContent = 'Platform: ' + d.platform;
+    $('obs').innerHTML = '';
+    (d.observations || []).forEach((o) => {
+      const li = document.createElement('li');
+      li.textContent = o.issue;
+      const s = document.createElement('small'); s.textContent = o.evidence;
+      li.appendChild(s); $('obs').appendChild(li);
+    });
+    $('subj').value = d.email?.subject || '';
+    $('body').value = d.email?.body || '';
+    $('dm').value = d.dm || '';
+    $('sendMsg').textContent = '';
+    $('result').hidden = false;
+    saveLead('New');
+  } catch (e) { $('err').textContent = e.message; }
+  $('go').disabled = false; $('go').textContent = 'Audit store';
+};
+
+function sentToday() {
+  const t = store.get('sent', { day: '', n: 0 });
+  return t.day === new Date().toDateString() ? t.n : 0;
+}
+
+$('send').onclick = async () => {
+  if (!current?.email) { $('sendMsg').textContent = 'Add their email in the form above first.'; return; }
+  if (sentToday() >= DAILY_CAP) { $('sendMsg').textContent = `Daily limit of ${DAILY_CAP} reached. Try again tomorrow.`; return; }
+  if (!confirm('Send this email to ' + current.email + '?')) return;
+  $('send').disabled = true;
+  try {
+    await call('/api/send', { to: current.email, subject: $('subj').value, body: $('body').value });
+    store.set('sent', { day: new Date().toDateString(), n: sentToday() + 1 });
+    $('sendMsg').textContent = 'Sent.';
+    saveLead('Contacted');
+  } catch (e) { $('sendMsg').textContent = e.message; }
+  $('send').disabled = false;
+};
+
+$('copyMail').onclick = () => navigator.clipboard.writeText($('subj').value + '\n\n' + $('body').value);
+$('copyDm').onclick = () => navigator.clipboard.writeText($('dm').value);
+$('openSocial').onclick = () => { if (current?.social) window.open(current.social, '_blank', 'noopener'); };
+$('markDm').onclick = () => saveLead('Contacted');
+
+function saveLead(status) {
+  const leads = store.get('leads', []);
+  const i = leads.findIndex((l) => l.url === current.url);
+  const follow = status === 'Contacted' ? new Date(Date.now() + 4 * 864e5).toDateString() : '';
+  const lead = { url: current.url, name: current.storeName || current.url, status, follow };
+  if (i >= 0) leads[i] = { ...leads[i], ...lead, follow: follow || leads[i].follow }; else leads.unshift(lead);
+  store.set('leads', leads); renderLeads();
+}
+
+function renderLeads() {
+  const leads = store.get('leads', []);
+  $('empty').hidden = leads.length > 0;
+  $('rows').innerHTML = '';
+  leads.forEach((l, i) => {
+    const tr = document.createElement('tr');
+    const a = document.createElement('td'); a.textContent = l.name;
+    const s = document.createElement('td');
+    const sel = document.createElement('select');
+    ['New', 'Contacted', 'Replied', 'Won', 'Dropped'].forEach((x) => { const o = new Option(x, x); o.selected = x === l.status; sel.add(o); });
+    sel.onchange = () => { leads[i].status = sel.value; store.set('leads', leads); };
+    s.appendChild(sel);
+    const f = document.createElement('td'); f.textContent = l.follow || '-';
+    tr.append(a, s, f); $('rows').appendChild(tr);
+  });
+}
+renderLeads();
+</script>
+</body>
+</html>
