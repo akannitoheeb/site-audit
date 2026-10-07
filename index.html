@@ -146,7 +146,9 @@ function count(){$('bodyCount').textContent=$('body').value.trim().split(/\s+/).
 
 async function call(path,payload){
   const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-app-password':$('pw').value},body:JSON.stringify(payload)});
-  const d=await r.json();if(!r.ok)throw new Error(d.error||'Something went wrong');return d;
+  const t=await r.text();let d;
+  try{d=JSON.parse(t)}catch{throw new Error('Server error '+r.status+(r.status===404?': the api folder was not found on this deployment.':': the function crashed. Check Vercel logs.'))}
+  if(!r.ok)throw new Error(d.error||'Something went wrong');return d;
 }
 const chip=(t,c)=>{const s=document.createElement('span');s.className='chip '+c;s.textContent=t;$('chips').appendChild(s)};
 
