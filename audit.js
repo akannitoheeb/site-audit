@@ -81,26 +81,41 @@ My services and offers: ${services || 'Email marketing strategy and WordPress we
 Homepage text (trimmed):
 ${text}`;
 
+  const provider = (process.env.AI_PROVIDER || 'groq').toLowerCase();
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: process.env.CLAUDE_MODEL || 'claude-sonnet-5-5',
-        max_tokens: 1200,
-        system,
-        messages: [{ role: 'user', content: user }],
-      }),
-    });
-    const data = await r.json();
-    if (!r.ok) return res.status(502).json({ error: data?.error?.message || 'AI request failed' });
-    const raw = data.content.map((c) => c.text || '').join('');
+    let raw = '';
+    if (provider === 'gemini') {
+      const model = process.env.AI_MODEL || 'gemini-2.5-flash';
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.5 },
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) return res.status(502).json({ error: d?.error?.message || 'AI request failed' });
+      raw = (d.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+    } else {
+      const model = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0.5,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) return res.status(502).json({ error: d?.error?.message || 'AI request failed' });
+      raw = d.choices?.[0]?.message?.content || '';
+    }
     const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-    return res.status(200).json({ platform, ...json });
+    return res.status(200).json({ platform, signals: sig, ...json });
   } catch {
     return res.status(500).json({ error: 'The AI reply could not be read. Try again.' });
   }
