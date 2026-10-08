@@ -57,6 +57,16 @@ function findContacts(html, host) {
   return out;
 }
 
+async function postRetry(url, opts, tries = 3) {
+  let r;
+  for (let i = 0; i < tries; i++) {
+    r = await fetch(url, opts);
+    if (![429, 500, 502, 503, 504].includes(r.status)) return r;
+    await new Promise((x) => setTimeout(x, 2000 * (i + 1)));
+  }
+  return r;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (req.headers['x-app-password'] !== process.env.APP_PASSWORD)
@@ -130,7 +140,7 @@ ${text}`;
     let raw = '';
     if (provider === 'gemini') {
       const model = process.env.AI_MODEL || 'gemini-3.8-flash';
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      const r = await postRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
         body: JSON.stringify({
@@ -140,11 +150,11 @@ ${text}`;
         }),
       });
       const d = await r.json();
-      if (!r.ok) return res.status(502).json({ error: d?.error?.message || 'AI request failed' });
+      if (!r.ok) return res.status(502).json({ error: [429, 503].includes(r.status) ? 'The AI service is busy right now. Wait a minute and try again.' : (d?.error?.message || 'AI request failed') });
       raw = (d.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
     } else {
       const model = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
-      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const r = await postRetry('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.GROQ_API_KEY}` },
         body: JSON.stringify({
@@ -155,7 +165,7 @@ ${text}`;
         }),
       });
       const d = await r.json();
-      if (!r.ok) return res.status(502).json({ error: d?.error?.message || 'AI request failed' });
+      if (!r.ok) return res.status(502).json({ error: [429, 503].includes(r.status) ? 'The AI service is busy right now. Wait a minute and try again.' : (d?.error?.message || 'AI request failed') });
       raw = d.choices?.[0]?.message?.content || '';
     }
     const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
