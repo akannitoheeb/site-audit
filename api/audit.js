@@ -71,25 +71,28 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Enter a valid store URL starting with https://' });
   }
 
-  let html;
+  let html, status;
   try {
     const r = await fetch(target, { headers: UA, signal: AbortSignal.timeout(12000) });
+    status = r.status;
     html = await r.text();
   } catch {
     return res.status(502).json({ error: 'Could not load that store. Check the link or try again.' });
   }
+  const challenged = html.length < 30000 && /just a moment\.\.\.|enable javascript and cookies to continue|checking your browser|cf-browser-verification|attention required/i.test(html);
+  if (challenged || status === 403 || status === 429)
+    return res.status(422).json({ error: 'This store blocks automated readers (it returned a bot-check page), so it cannot be audited here. Review it by hand or try another store.' });
 
-  // Look for contact details on the homepage and one contact page (the store's own public pages)
-  let extra = '';
+  // Look for contact details on the store's own public pages (homepage plus contact pages)
   const cm = html.match(/href=["']([^"']*contact[^"']*)["']/i);
-  if (cm) {
-    try {
-      const u = new URL(cm[1], target);
-      if (u.hostname === target.hostname) {
-        extra = await (await fetch(u, { headers: UA, signal: AbortSignal.timeout(8000) })).text();
-      }
-    } catch {}
-  }
+  const paths = cm ? [cm[1]] : ['/pages/contact', '/contact', '/pages/contact-us', '/contact-us'];
+  const pages = await Promise.allSettled(paths.map(async (p) => {
+    const u = new URL(p, target);
+    if (u.hostname !== target.hostname) return '';
+    const rr = await fetch(u, { headers: UA, signal: AbortSignal.timeout(6000) });
+    return rr.ok ? await rr.text() : '';
+  }));
+  const extra = pages.map((x) => (x.status === 'fulfilled' ? x.value : '')).join(' ');
   const found = findContacts(html + ' ' + extra, target.hostname);
 
   const platform = detect(html);
