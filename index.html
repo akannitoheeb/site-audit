@@ -137,7 +137,7 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
 
   <section class="card">
     <h2>Leads</h2>
-    <p class="hint">Every audit is saved here with its drafts. Contacted leads get a follow-up date 4 days out; overdue ones turn red.</p>
+    <p class="hint">Every audit is saved here with its drafts and syncs across your devices. Contacted leads get a follow-up date 4 days out; overdue ones turn red.</p>
     <div class="scroll"><table><thead><tr><th>Store</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <p id="empty" class="hint">No leads yet.</p>
   </section>
@@ -147,6 +147,7 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
 <script>
 const $=i=>document.getElementById(i),CAP=25,DAY=864e5;
 let current=null;
+let LEADS=[];
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 const norm=u=>/^https?:\/\//i.test(u)?u:'https://'+u;
 const wc=t=>t.trim().split(/\s+/).filter(Boolean).length;
@@ -227,7 +228,7 @@ $('bulkGo').onclick=async()=>{
   $('err').textContent=fail.join('\n');$('bulkGo').disabled=false;
 };
 
-const sentToday=()=>{const t=store.get('sent',{day:'',n:0});return t.day===new Date().toDateString()?t.n:0};
+const sentToday=()=>LEADS.filter(l=>l.emailed&&new Date(l.emailed).toDateString()===new Date().toDateString()).length;
 $('send').onclick=async()=>{
   sync();
   if(!current.to){$('sendMsg').textContent='Type or paste their email in the Send to box first.';$('email').focus();return}
@@ -235,7 +236,7 @@ $('send').onclick=async()=>{
   if(!confirm('Send this email to '+current.to+'?'))return;
   $('send').disabled=true;
   try{await call('/api/send',{to:current.to,subject:current.email.subject,body:current.email.body});
-    store.set('sent',{day:new Date().toDateString(),n:sentToday()+1});setStep(4);toast('Email sent');upsert(current,'Contacted')}
+    setStep(4);toast('Email sent');upsert(current,'Contacted',true)}
   catch(e){$('sendMsg').textContent=e.message}
   $('send').disabled=false;
 };
@@ -247,36 +248,49 @@ const name=()=>current.storeName||current.url;
 $('findMail').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' contact email'),'_blank','noopener');
 $('findSocial').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' instagram'),'_blank','noopener');
 
-function upsert(c,status){
-  const L=store.get('leads',[]),i=L.findIndex(l=>l.url===c.url);
+function saveLead(l){store.set('leads',LEADS);call('/api/leads',{op:'save',lead:l}).catch(()=>toast('Could not sync. Saved on this device.'))}
+function upsert(c,status,emailed){
+  const i=LEADS.findIndex(l=>l.url===c.url);let l;
   const follow=status==='Contacted'?Date.now()+4*DAY:null;
-  if(i>=0){L[i]={...L[i],name:c.storeName||L[i].name,data:c};if(status&&status!=='New')L[i].status=status;if(follow)L[i].follow=follow}
-  else L.unshift({url:c.url,name:c.storeName||c.url,status:status||'New',follow,data:c});
-  store.set('leads',L);render();
+  if(i>=0){l=LEADS[i]={...LEADS[i],name:c.storeName||LEADS[i].name,data:c};if(status&&status!=='New')l.status=status;if(follow)l.follow=follow}
+  else{l={url:c.url,name:c.storeName||c.url,status:status||'New',follow,data:c};LEADS.unshift(l)}
+  if(emailed)l.emailed=Date.now();
+  saveLead(l);render();
+}
+async function loadLeads(){
+  if(!$('pw').value)return;
+  try{
+    const d=await call('/api/leads',{op:'list'});
+    const first=!store.get('migrated',false),have=new Set(d.leads.map(l=>l.url));
+    const extra=first?LEADS.filter(l=>!have.has(l.url)):[];
+    LEADS=[...d.leads,...extra];extra.forEach(l=>call('/api/leads',{op:'save',lead:l}).catch(()=>{}));
+    store.set('migrated',true);store.set('leads',LEADS);render();
+  }catch(e){toast('Could not sync leads. Showing this device\'s copy.')}
 }
 function render(){
-  const L=store.get('leads',[]),now=Date.now();
-  $('sTotal').textContent=L.length;$('sContacted').textContent=L.filter(l=>l.status==='Contacted').length;
+  const now=Date.now();
+  $('sTotal').textContent=LEADS.length;$('sContacted').textContent=LEADS.filter(l=>l.status==='Contacted').length;
   $('sSent').textContent=sentToday()+'/'+CAP;
-  $('sDue').textContent=L.filter(l=>l.status==='Contacted'&&l.follow&&l.follow<=now).length;
-  $('empty').hidden=L.length>0;$('rows').innerHTML='';
-  L.forEach((l,i)=>{
+  $('sDue').textContent=LEADS.filter(l=>l.status==='Contacted'&&l.follow&&l.follow<=now).length;
+  $('empty').hidden=LEADS.length>0;$('rows').innerHTML='';
+  LEADS.forEach((l,i)=>{
     const tr=document.createElement('tr');
     const a=document.createElement('td');a.textContent=l.name;
     const s=document.createElement('td'),sel=document.createElement('select');
     ['New','Contacted','Replied','Won','Dropped'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
-    sel.onchange=()=>{L[i].status=sel.value;if(sel.value==='Contacted'&&!L[i].follow)L[i].follow=Date.now()+4*DAY;store.set('leads',L);render()};
+    sel.onchange=()=>{l.status=sel.value;if(sel.value==='Contacted'&&!l.follow)l.follow=Date.now()+4*DAY;saveLead(l);render()};
     s.appendChild(sel);
     const f=document.createElement('td');f.textContent=l.follow?new Date(l.follow).toDateString():'-';
     if(l.status==='Contacted'&&l.follow&&l.follow<=now)f.className='late';
     const x=document.createElement('td');x.className='acts';
     const o=document.createElement('button');o.textContent='Open';o.onclick=()=>l.data?show(l.data):toast('No saved audit for this lead');
     const b=document.createElement('button');b.className='ghost';b.textContent='Remove';
-    b.onclick=()=>{L.splice(i,1);store.set('leads',L);render()};
+    b.onclick=()=>{LEADS.splice(i,1);store.set('leads',LEADS);call('/api/leads',{op:'delete',url:l.url}).catch(()=>toast('Could not remove online'));render()};
     x.append(o,b);tr.append(a,s,f,x);$('rows').appendChild(tr);
   });
 }
-render();
+LEADS=store.get('leads',[]);render();loadLeads();
+$('pw').addEventListener('change',()=>{store.set('pw',$('pw').value);loadLeads()});
 </script>
 </body>
 </html>
