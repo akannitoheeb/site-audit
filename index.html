@@ -1,52 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ATM Outreach</title>
 <style>
-:root{--blue:#2338ff;--ink:#101428;--paper:#f3f4fb;--card:#fff;--line:#dfe2f2;--mute:#5d6384;--sun:#ffd23f;--mint:#0f9d6b;--coral:#e8453a}
+:root{--bg:#f3f4fb;--card:#fff;--ink:#101428;--mute:#5d6384;--line:#dfe2f2;--hero:#2338ff;--btn:#2338ff;--btntx:#fff;--big:#101428;--bigtx:#fff;--field:#fff;--obs:#fffbe9;--chip:#e6e8f7;--okbg:#d9f5ea;--oktx:#07603f;--badbg:#fde1de;--badtx:#9b2218;--sun:#ffd23f;--mint:#0f9d6b;--coral:#e8453a}
+:root[data-theme=dark]{--bg:#0d1020;--card:#171b30;--ink:#eceefa;--mute:#9aa0c4;--line:#2b3158;--hero:#1a2166;--btn:#4a5bff;--big:#eceefa;--bigtx:#101428;--field:#11142a;--obs:#2a2713;--chip:#252a4d;--okbg:#123a2d;--oktx:#7be0b4;--badbg:#43201f;--badtx:#ff9a8f;--coral:#ff7a6e}
 *{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
-header{background:var(--blue);color:#fff;padding:36px 16px 84px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--hero);color:#fff;padding:28px 16px 84px}
 .wrap{max-width:980px;margin:0 auto}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.top b{letter-spacing:.08em;font-size:.85rem}
 h1{font-size:clamp(2rem,6vw,3.2rem);line-height:1.05;margin:0 0 10px;letter-spacing:-.03em;font-weight:800}
-header p{margin:0;max-width:520px;color:#dfe3ff;font-size:1.05rem}
-header mark{background:var(--sun);color:var(--ink);padding:0 6px;border-radius:4px}
+header p{margin:0;max-width:520px;color:#dfe3ff}
+header mark{background:var(--sun);color:#101428;padding:0 6px;border-radius:4px}
 main{max-width:980px;margin:-56px auto 64px;padding:0 16px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-.stat{background:var(--card);border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(16,20,40,.12)}
+.stat{background:var(--card);border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.14)}
 .stat b{display:block;font-size:1.8rem;line-height:1.1}
 .stat span{color:var(--mute);font-size:.85rem}
 .stat.due b{color:var(--coral)}
 @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
 .steps{display:flex;gap:8px;margin:0 0 20px;padding:0;list-style:none;flex-wrap:wrap}
-.steps li{padding:6px 14px;border-radius:99px;background:#e6e8f7;color:var(--mute);font-weight:600;font-size:.85rem}
-.steps li.on{background:var(--ink);color:#fff}
+.steps li{padding:6px 14px;border-radius:99px;background:var(--chip);color:var(--mute);font-weight:600;font-size:.85rem}
+.steps li.on{background:var(--ink);color:var(--card)}
 .steps li.done{background:var(--mint);color:#fff}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:20px}
 h2{font-size:1.2rem;margin:0 0 4px}
 .hint{color:var(--mute);margin:0 0 12px;font-size:.92rem}
 label{display:block;font-weight:700;font-size:.88rem;margin:14px 0 5px}
-input,textarea,select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit}
+input,textarea,select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--field);color:var(--ink);font:inherit}
 textarea{min-height:130px;resize:vertical}
-:focus-visible{outline:3px solid var(--sun);outline-offset:1px;border-color:var(--blue)}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:640px){.row{grid-template-columns:1fr}}
-button{font:inherit;font-weight:700;padding:11px 18px;border-radius:8px;border:2px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer;transition:transform .12s}
-button:hover:not(:disabled){transform:translateY(-1px)}
-button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
-button.big{width:100%;margin-top:18px;padding:14px;font-size:1.05rem;background:var(--ink);border-color:var(--ink)}
+:focus-visible{outline:3px solid var(--sun);outline-offset:1px}
+button,.tab{font:inherit;font-weight:700;padding:11px 18px;border-radius:8px;border:2px solid var(--btn);background:var(--btn);color:var(--btntx);cursor:pointer}
+button.ghost,.tab{background:var(--card);color:var(--ink);border-color:var(--line)}
+.tab.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
+button.big{width:100%;margin-top:18px;padding:14px;font-size:1.05rem;background:var(--big);border-color:var(--big);color:var(--bigtx)}
+header button{background:transparent;border-color:#ffffff88;color:#fff;padding:6px 14px;font-size:.85rem}
 button:disabled{opacity:.6;cursor:wait}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.err{color:var(--coral);font-weight:600;margin-top:10px;min-height:1.2em}
+.err{color:var(--coral);font-weight:600;margin-top:10px;min-height:1.2em;white-space:pre-wrap}
 details{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
 summary{cursor:pointer;font-weight:700}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.chip{padding:4px 12px;border-radius:99px;font-size:.82rem;font-weight:700}
-.ok{background:#d9f5ea;color:#07603f}.bad{background:#fde1de;color:#9b2218}.neu{background:#e6e8f7;color:var(--ink)}
+.chip{padding:4px 12px;border-radius:99px;font-size:.82rem;font-weight:700;text-decoration:none}
+.ok{background:var(--okbg);color:var(--oktx)}.bad{background:var(--badbg);color:var(--badtx)}.neu{background:var(--chip);color:var(--ink)}
 .obs{list-style:none;padding:0;margin:0;display:grid;gap:10px}
-.obs li{border-left:5px solid var(--sun);background:#fffbe9;padding:10px 14px;border-radius:0 8px 8px 0;font-weight:700}
+.obs li{border-left:5px solid var(--sun);background:var(--obs);padding:10px 14px;border-radius:0 8px 8px 0;font-weight:700}
 .obs small{display:block;font-weight:400;color:var(--mute);margin-top:2px}
 .two{display:grid;grid-template-columns:3fr 2fr;gap:20px}
 @media(max-width:820px){.two{grid-template-columns:1fr}}
@@ -55,46 +57,49 @@ summary{cursor:pointer;font-weight:700}
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);font-size:.92rem}
 td.late{color:var(--coral);font-weight:700}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:99px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
+td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:12px 20px;border-radius:99px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9}
 .toast.show{opacity:1}
 [hidden]{display:none!important}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <header><div class="wrap">
+  <div class="top"><b>ATM OUTREACH</b><button id="theme" type="button">Dark mode</button></div>
   <h1>Find the gap.<br><mark>Send the pitch.</mark></h1>
-  <p>Paste a store, get an honest audit and two personal drafts in seconds. You review. You send.</p>
+  <p>Paste a store, get an honest audit and two personal drafts. You review. You send.</p>
 </div></header>
 
 <main>
-  <div class="stats" aria-label="Your numbers">
+  <div class="stats">
     <div class="stat"><b id="sTotal">0</b><span>Stores audited</span></div>
     <div class="stat"><b id="sContacted">0</b><span>Contacted</span></div>
     <div class="stat"><b id="sSent">0/25</b><span>Emails sent today</span></div>
     <div class="stat due"><b id="sDue">0</b><span>Follow-ups due</span></div>
   </div>
-
   <ol class="steps" id="steps"><li class="on">1 Add store</li><li>2 Audit</li><li>3 Review drafts</li><li>4 Send</li></ol>
 
   <section class="card">
-    <h2>Add a store</h2>
-    <p class="hint">Only the store link is required. Add an email or social link so you can send from here.</p>
-    <label for="url">Store link</label>
-    <input id="url" type="url" placeholder="https://examplestore.com" inputmode="url">
-    <div class="row">
-      <div><label for="email">Their email</label><input id="email" type="email" placeholder="hello@examplestore.com"></div>
-      <div><label for="social">Their Instagram, Facebook or LinkedIn link</label><input id="social" type="url" placeholder="https://instagram.com/examplestore"></div>
+    <div class="actions" style="margin:0 0 6px"><button class="tab on" id="tSingle" type="button">One store</button><button class="tab" id="tBulk" type="button">Bulk (up to 20)</button></div>
+    <div id="single">
+      <label for="url">Store link</label>
+      <input id="url" type="url" placeholder="https://examplestore.com" inputmode="url">
+      <button class="big" id="go">Audit this store</button>
     </div>
+    <div id="bulk" hidden>
+      <label for="bulkUrls">One store link per line</label>
+      <textarea id="bulkUrls" placeholder="https://store-one.com&#10;https://store-two.com"></textarea>
+      <p class="hint">Audits run one by one with a short pause. Results land in the Leads table below, and you open each to review and send. Keep this page open while it runs.</p>
+      <button class="big" id="bulkGo">Audit all</button>
+      <div id="bulkMsg" class="hint" role="status" style="margin-top:10px"></div>
+    </div>
+    <div id="err" class="err" role="alert"></div>
     <details>
       <summary>My settings (password and services)</summary>
-      <label for="pw">App password</label>
-      <input id="pw" type="password" autocomplete="current-password">
+      <label for="pw">App password</label><input id="pw" type="password" autocomplete="current-password">
       <label for="services">What I offer (the AI pitches only this)</label>
       <textarea id="services" style="min-height:90px">Email marketing strategy: welcome flows, abandoned cart emails, campaigns. WordPress web design and store improvements.</textarea>
     </details>
-    <button class="big" id="go">Audit this store</button>
-    <div id="err" class="err" role="alert"></div>
   </section>
 
   <div id="result" hidden>
@@ -103,21 +108,27 @@ td.late{color:var(--coral);font-weight:700}
       <div class="chips" id="chips"></div>
       <ul class="obs" id="obs"></ul>
     </section>
-
     <div class="two">
       <section class="card">
         <h2>Email draft</h2>
-        <p class="hint">Edit anything. A signature and opt-out line are added when sent.</p>
+        <p class="hint">A signature and opt-out line are added when sent.</p>
+        <label for="email">Send to (auto-filled if the store shows an email)</label>
+        <input id="email" type="email" placeholder="hello@theirstore.com">
+        <div class="actions" style="margin-top:8px"><button class="ghost" id="findMail" type="button">Search for their email</button></div>
         <label for="subj">Subject</label><input id="subj">
         <label for="body">Message</label><textarea id="body"></textarea>
         <div class="count" id="bodyCount"></div>
         <div class="actions"><button id="send">Send email</button><button class="ghost" id="copyMail">Copy</button></div>
-        <div id="sendMsg" role="status" class="hint"></div>
+        <div id="sendMsg" role="status" class="hint" style="margin-top:8px"></div>
       </section>
       <section class="card">
         <h2>DM draft</h2>
         <p class="hint">Social apps block bots, so you paste this yourself.</p>
-        <textarea id="dm" style="min-height:150px"></textarea>
+        <label for="social">Their profile link</label>
+        <input id="social" type="url" placeholder="https://instagram.com/theirstore">
+        <div class="actions" style="margin-top:8px"><button class="ghost" id="findSocial" type="button">Search for their Instagram</button></div>
+        <label for="dm">Message</label>
+        <textarea id="dm" style="min-height:140px"></textarea>
         <div class="count" id="dmCount"></div>
         <div class="actions"><button class="ghost" id="copyDm">Copy DM</button><button class="ghost" id="openSocial">Open profile</button><button class="ghost" id="markDm">Mark sent</button></div>
       </section>
@@ -126,23 +137,31 @@ td.late{color:var(--coral);font-weight:700}
 
   <section class="card">
     <h2>Leads</h2>
-    <p class="hint">Contacted leads get a follow-up date 4 days out. Overdue ones turn red.</p>
+    <p class="hint">Every audit is saved here with its drafts. Contacted leads get a follow-up date 4 days out; overdue ones turn red.</p>
     <div class="scroll"><table><thead><tr><th>Store</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
-    <p id="empty" class="hint">No leads yet. Audit your first store above.</p>
+    <p id="empty" class="hint">No leads yet.</p>
   </section>
 </main>
 <div class="toast" id="toast" role="status"></div>
 
 <script>
-const $=(i)=>document.getElementById(i), CAP=25, DAY=864e5;
+const $=i=>document.getElementById(i),CAP=25,DAY=864e5;
 let current=null;
-const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const norm=u=>/^https?:\/\//i.test(u)?u:'https://'+u;
+const wc=t=>t.trim().split(/\s+/).filter(Boolean).length;
+
+function theme(d){document.documentElement.dataset.theme=d?'dark':'light';$('theme').textContent=d?'Light mode':'Dark mode'}
+theme(store.get('dark',matchMedia('(prefers-color-scheme:dark)').matches));
+$('theme').onclick=()=>{const d=document.documentElement.dataset.theme!=='dark';store.set('dark',d);theme(d)};
+
 $('pw').value=store.get('pw','');$('services').value=store.get('services',$('services').value);
+function mode(b){$('single').hidden=b;$('bulk').hidden=!b;$('tSingle').classList.toggle('on',!b);$('tBulk').classList.toggle('on',b);$('err').textContent=''}
+$('tSingle').onclick=()=>mode(false);$('tBulk').onclick=()=>mode(true);
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
 function setStep(n){[...$('steps').children].forEach((li,i)=>{li.className=i<n?'done':i===n?'on':''})}
-function count(){$('bodyCount').textContent=$('body').value.trim().split(/\s+/).filter(Boolean).length+' words (aim for under 130)';$('dmCount').textContent=$('dm').value.trim().split(/\s+/).filter(Boolean).length+' words (aim for under 60)'}
-['body','dm'].forEach(i=>$(i).addEventListener('input',count));
+function count(){$('bodyCount').textContent=wc($('body').value)+' words (aim for under 130)';$('dmCount').textContent=wc($('dm').value)+' words (aim for under 60)'}
 
 async function call(path,payload){
   const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-app-password':$('pw').value},body:JSON.stringify(payload)});
@@ -150,58 +169,89 @@ async function call(path,payload){
   try{d=JSON.parse(t)}catch{throw new Error('Server error '+r.status+(r.status===404?': the api folder was not found on this deployment.':': the function crashed. Check Vercel logs.'))}
   if(!r.ok)throw new Error(d.error||'Something went wrong');return d;
 }
+async function runAudit(url){
+  url=norm(url.trim());
+  const d=await call('/api/audit',{url,services:$('services').value});
+  const f=d.found||{};
+  return {...d,url,to:f.email||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
+}
+
 const chip=(t,c)=>{const s=document.createElement('span');s.className='chip '+c;s.textContent=t;$('chips').appendChild(s)};
+function show(c){
+  current=c;const f=c.found||{},s=c.signals||{};
+  $('storeName').textContent=c.storeName||c.url;
+  $('chips').innerHTML='';
+  chip(c.platform,'neu');
+  chip(s.emailToolDetected?'Email tool found':'No email tool found',s.emailToolDetected?'ok':'bad');
+  chip(s.newsletterOrSubscribeText?'Subscribe text found':'No subscribe text',s.newsletterOrSubscribeText?'ok':'bad');
+  chip(s.mobileViewportTag?'Mobile ready':'No mobile tag',s.mobileViewportTag?'ok':'bad');
+  chip((s.pageSizeKB||0)+' KB homepage','neu');
+  chip(f.email?'Email found':'No email on the site',f.email?'ok':'bad');
+  [['instagram','Instagram'],['facebook','Facebook'],['linkedin','LinkedIn'],['tiktok','TikTok'],['x','X'],['whatsapp','WhatsApp']].forEach(([k,n])=>{
+    if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
+  $('obs').innerHTML='';
+  (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
+  $('email').value=c.to||'';$('social').value=c.profile||'';
+  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('sendMsg').textContent='';
+  count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
+}
+function sync(){
+  current.to=$('email').value.trim();current.profile=$('social').value.trim();
+  current.email={subject:$('subj').value,body:$('body').value};current.dm=$('dm').value;
+}
+['email','social','subj','body','dm'].forEach(i=>$(i).addEventListener('change',()=>{if(current){sync();upsert(current)}}));
+['body','dm'].forEach(i=>$(i).addEventListener('input',count));
 
 $('go').onclick=async()=>{
   $('err').textContent='';store.set('pw',$('pw').value);store.set('services',$('services').value);
+  if(!$('url').value.trim()){$('err').textContent='Paste a store link first.';return}
   const msgs=['Loading the store...','Reading the page...','Spotting the gaps...','Writing your drafts...'];let m=0;
   $('go').disabled=true;$('go').textContent=msgs[0];setStep(1);
   const timer=setInterval(()=>{m=Math.min(m+1,3);$('go').textContent=msgs[m]},2500);
-  try{
-    const d=await call('/api/audit',{url:$('url').value,email:$('email').value,social:$('social').value,services:$('services').value});
-    const f=d.found||{};
-    if(!$('email').value&&f.email)$('email').value=f.email;
-    if(!$('social').value){const sc=f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||'';if(sc)$('social').value=sc}
-    current={...d,url:$('url').value,email:$('email').value,social:$('social').value};
-    $('storeName').textContent=d.storeName||$('url').value;
-    $('chips').innerHTML='';const s=d.signals||{};
-    chip(d.platform,'neu');
-    chip(s.emailToolDetected?'Email tool found':'No email tool found',s.emailToolDetected?'ok':'bad');
-    chip(s.newsletterOrSubscribeText?'Subscribe text found':'No subscribe text',s.newsletterOrSubscribeText?'ok':'bad');
-    chip(s.mobileViewportTag?'Mobile ready':'No mobile tag',s.mobileViewportTag?'ok':'bad');
-    chip((s.pageSizeKB||0)+' KB homepage','neu');
-    chip(f.email?'Email found: '+f.email:'No email found on the site',f.email?'ok':'bad');
-    [['instagram','Instagram'],['facebook','Facebook'],['linkedin','LinkedIn'],['tiktok','TikTok'],['x','X'],['whatsapp','WhatsApp']].forEach(([k,n])=>{
-      if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
-    $('obs').innerHTML='';
-    (d.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
-    $('subj').value=d.email?.subject||'';$('body').value=d.email?.body||'';$('dm').value=d.dm||'';$('sendMsg').textContent='';
-    count();$('result').hidden=false;$('result').scrollIntoView({behavior:'smooth'});setStep(2);saveLead('New');
-  }catch(e){$('err').textContent=e.message;setStep(0)}
+  try{const c=await runAudit($('url').value);show(c);upsert(c,'New')}
+  catch(e){$('err').textContent=e.message;setStep(0)}
   clearInterval(timer);$('go').disabled=false;$('go').textContent='Audit this store';
 };
 
+$('bulkGo').onclick=async()=>{
+  $('err').textContent='';store.set('pw',$('pw').value);store.set('services',$('services').value);
+  const urls=[...new Set($('bulkUrls').value.split(/\s+/).filter(Boolean))].slice(0,20);
+  if(!urls.length){$('err').textContent='Paste at least one store link.';return}
+  $('bulkGo').disabled=true;let ok=0;const fail=[];
+  for(let i=0;i<urls.length;i++){
+    $('bulkMsg').textContent='Auditing '+(i+1)+' of '+urls.length+': '+urls[i];
+    try{upsert(await runAudit(urls[i]),'New');ok++}catch(e){fail.push(urls[i]+' - '+e.message)}
+    if(i<urls.length-1)await new Promise(r=>setTimeout(r,6000));
+  }
+  $('bulkMsg').textContent='Done. '+ok+' audited'+(fail.length?', '+fail.length+' failed.':'.')+' Open them from the Leads table below.';
+  $('err').textContent=fail.join('\n');$('bulkGo').disabled=false;
+};
+
 const sentToday=()=>{const t=store.get('sent',{day:'',n:0});return t.day===new Date().toDateString()?t.n:0};
-$('send').onclick=async()=>{current.email=$('email').value.trim();
-  if(!current?.email){$('sendMsg').textContent='Add their email in the form above first.';return}
+$('send').onclick=async()=>{
+  sync();
+  if(!current.to){$('sendMsg').textContent='Type or paste their email in the Send to box first.';$('email').focus();return}
   if(sentToday()>=CAP){$('sendMsg').textContent='Daily limit reached. Try again tomorrow.';return}
-  if(!confirm('Send this email to '+current.email+'?'))return;
+  if(!confirm('Send this email to '+current.to+'?'))return;
   $('send').disabled=true;
-  try{await call('/api/send',{to:current.email,subject:$('subj').value,body:$('body').value});
-    store.set('sent',{day:new Date().toDateString(),n:sentToday()+1});setStep(4);toast('Email sent');saveLead('Contacted')}
+  try{await call('/api/send',{to:current.to,subject:current.email.subject,body:current.email.body});
+    store.set('sent',{day:new Date().toDateString(),n:sentToday()+1});setStep(4);toast('Email sent');upsert(current,'Contacted')}
   catch(e){$('sendMsg').textContent=e.message}
   $('send').disabled=false;
 };
 $('copyMail').onclick=()=>{navigator.clipboard.writeText($('subj').value+'\n\n'+$('body').value);toast('Email copied')};
 $('copyDm').onclick=()=>{navigator.clipboard.writeText($('dm').value);toast('DM copied')};
-$('openSocial').onclick=()=>{const u=$('social').value.trim();u?window.open(u,'_blank','noopener'):toast('Add their social link first')};
-$('markDm').onclick=()=>{saveLead('Contacted');toast('Marked as contacted')};
+$('openSocial').onclick=()=>{const u=$('social').value.trim();u?window.open(norm(u),'_blank','noopener'):toast('Paste their profile link first')};
+$('markDm').onclick=()=>{sync();upsert(current,'Contacted');toast('Marked as contacted')};
+const name=()=>current.storeName||current.url;
+$('findMail').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' contact email'),'_blank','noopener');
+$('findSocial').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' instagram'),'_blank','noopener');
 
-function saveLead(status){
-  const L=store.get('leads',[]),i=L.findIndex(l=>l.url===current.url);
+function upsert(c,status){
+  const L=store.get('leads',[]),i=L.findIndex(l=>l.url===c.url);
   const follow=status==='Contacted'?Date.now()+4*DAY:null;
-  const lead={url:current.url,name:current.storeName||current.url,status};
-  if(i>=0)L[i]={...L[i],...lead,follow:follow||L[i].follow};else L.unshift({...lead,follow});
+  if(i>=0){L[i]={...L[i],name:c.storeName||L[i].name,data:c};if(status&&status!=='New')L[i].status=status;if(follow)L[i].follow=follow}
+  else L.unshift({url:c.url,name:c.storeName||c.url,status:status||'New',follow,data:c});
   store.set('leads',L);render();
 }
 function render(){
@@ -219,9 +269,11 @@ function render(){
     s.appendChild(sel);
     const f=document.createElement('td');f.textContent=l.follow?new Date(l.follow).toDateString():'-';
     if(l.status==='Contacted'&&l.follow&&l.follow<=now)f.className='late';
-    const x=document.createElement('td'),b=document.createElement('button');b.className='ghost';b.textContent='Remove';
-    b.onclick=()=>{L.splice(i,1);store.set('leads',L);render()};x.appendChild(b);
-    tr.append(a,s,f,x);$('rows').appendChild(tr);
+    const x=document.createElement('td');x.className='acts';
+    const o=document.createElement('button');o.textContent='Open';o.onclick=()=>l.data?show(l.data):toast('No saved audit for this lead');
+    const b=document.createElement('button');b.className='ghost';b.textContent='Remove';
+    b.onclick=()=>{L.splice(i,1);store.set('leads',L);render()};
+    x.append(o,b);tr.append(a,s,f,x);$('rows').appendChild(tr);
   });
 }
 render();
