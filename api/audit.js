@@ -160,8 +160,11 @@ Relevance rules:
 
 Drafting rules:
 - Email: under 130 words, plain and friendly, no hype, mention one or two solid observations, offer one clear next step, sign off as Toheeb. Do not add an unsubscribe line (the app adds it).
-- DM: under 60 words, casual, one observation, one question.
-- Simple English.
+- DM: 35 to 60 words, casual and warm. Name ONE specific thing you saw on this store, then ask one easy question or offer one quick helpful idea.
+- Both the email and the DM must point to something concrete from this store. Never use vague filler such as "I help with that stuff", "saw your site", or "let me know".
+- If something might just be hidden from you (popups, reviews, email forms), ask a question about it instead of saying it is missing.
+- Simple English, no emojis, no hype words.
+- Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Hey, love the bespoke game sets on The Craft House! Noticed the homepage still shows an 'Offer has expired' banner with the timer at zero. Planning your next campaign soon, or want a quick hand cleaning that up?"
 
 Return ONLY JSON: {"storeName":string,"observations":[{"issue":string,"evidence":string}],"email":{"subject":string,"body":string},"dm":string}`;
 
