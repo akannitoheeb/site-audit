@@ -109,6 +109,7 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
       <h2 id="storeName"></h2>
       <div class="chips" id="chips"></div>
       <ul class="obs" id="obs"></ul>
+      <div class="actions"><button class="ghost" id="followBtn" type="button">Draft a follow-up</button><span id="followMsg" class="hint" style="align-self:center"></span></div>
     </section>
     <div class="two">
       <section class="card">
@@ -198,8 +199,7 @@ function show(c){
   $('obs').innerHTML='';
   (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
   $('email').value=c.to||'';$('social').value=c.profile||'';
-  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('sendMsg').textContent='';
-  count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
+  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('sendMsg').textContent='';$('followMsg').textContent='';
 }
 function sync(){
   current.to=$('email').value.trim();current.profile=$('social').value.trim();
@@ -258,6 +258,21 @@ $('findMail').onclick=()=>window.open('https://www.google.com/search?q='+encodeU
 $('findSocial').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' instagram'),'_blank','noopener');
 
 function saveLead(l){store.set('leads',LEADS);call('/api/leads',{op:'save',lead:l}).catch(()=>toast('Could not sync. Saved on this device.'))}
+$('followBtn').onclick=async()=>{
+  if(!current)return;
+  sync();
+  const first=current.first||{email:current.email,dm:current.dm},n=current.followups||0;
+  if(n>=2){$('followMsg').textContent='Two follow-ups is enough. Move on to the next store.';return}
+  $('followBtn').disabled=true;$('followMsg').textContent='Writing...';
+  try{
+    const d=await call('/api/audit',{mode:'followup',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,count:n,services:$('services').value,voice:($('voice')||{}).value||''});
+    current.first=first;current.followups=n+1;current.email=d.email;current.dm=d.dm;
+    $('subj').value=d.email?.subject||'';$('body').value=d.email?.body||'';$('dm').value=d.dm||'';
+    count();upsert(current);
+    $('followMsg').textContent='Follow-up '+(n+1)+' is ready. Review it, then send or copy.';
+  }catch(e){$('followMsg').textContent=e.message}
+  $('followBtn').disabled=false;
+};
 function upsert(c,status,emailed){
   const i=LEADS.findIndex(l=>l.url===c.url);let l;
   const follow=status==='Contacted'?Date.now()+4*DAY:null;
