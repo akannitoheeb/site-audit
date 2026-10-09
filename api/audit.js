@@ -100,7 +100,7 @@ async function askGroq(system, user, key) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return { ok: false, error: friendly(r.status, d?.error?.message) };
-    return { ok: true, text: d.choices?.[0]?.message?.content || '' };
+    return { ok: true, text: (d.choices?.[0]?.message?.content || '').replace(/<think>[\s\S]*?<\/think>/g, '') };
   } catch { return { ok: false, error: 'Could not reach Groq' }; }
 }
 
