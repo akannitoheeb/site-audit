@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All leads | ATM Outreach</title>
+<style>
+:root{--bg:#f3f4fb;--card:#fff;--ink:#101428;--mute:#5d6384;--line:#dfe2f2;--hero:#2338ff;--btn:#2338ff;--field:#fff;--coral:#e8453a}
+:root[data-theme=dark]{--bg:#0d1020;--card:#171b30;--ink:#eceefa;--mute:#9aa0c4;--line:#2b3158;--hero:#1a2166;--btn:#4a5bff;--field:#11142a;--coral:#ff7a6e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--hero);color:#fff;padding:22px 16px 70px}
+.wrap{max-width:980px;margin:0 auto}
+header a{color:#fff;font-weight:700}
+h1{margin:10px 0 0;font-size:1.9rem;letter-spacing:-.02em}
+main{max-width:980px;margin:-48px auto 48px;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.bar{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:14px}
+@media(max-width:640px){.bar{grid-template-columns:1fr}}
+input,select{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--field);color:var(--ink);font:inherit}
+:focus-visible{outline:3px solid #ffd23f;outline-offset:1px}
+button{font:inherit;font-weight:700;padding:8px 14px;border-radius:8px;border:2px solid var(--btn);background:var(--btn);color:#fff;cursor:pointer}
+button.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.45;cursor:default}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);font-size:.92rem}
+td.late{color:var(--coral);font-weight:700}
+td.acts{white-space:nowrap}td.acts button{margin-right:6px;padding:6px 12px}
+.pager{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap}
+.hint{color:var(--mute);font-size:.92rem}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:12px 20px;border-radius:99px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header><div class="wrap"><a href="index.html">&larr; Back to outreach</a><h1>All leads <span id="count" style="font-weight:400;opacity:.8"></span></h1></div></header>
+<main><section class="card">
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search store name or link" aria-label="Search">
+    <select id="st" aria-label="Status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Replied</option><option>Won</option><option>Dropped</option></select>
+    <select id="size" aria-label="Per page"><option value="50">50 per page</option><option value="100">100 per page</option><option value="200">200 per page</option><option value="500">500 per page</option></select>
+  </div>
+  <p id="msg" class="hint"></p>
+  <div class="scroll"><table><thead><tr><th>Store</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="pager"><button class="ghost" id="prev">Previous</button><span id="pageInfo" class="hint"></span><button class="ghost" id="next">Next</button></div>
+</section></main>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $=i=>document.getElementById(i),DAY=864e5;
+const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+document.documentElement.dataset.theme=store.get('dark',matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light';
+let LEADS=store.get('leads',[]),page=0;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
+async function call(payload){
+  const r=await fetch('/api/leads',{method:'POST',headers:{'content-type':'application/json','x-app-password':store.get('pw','')},body:JSON.stringify(payload)});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Failed');return d;
+}
+function save(l){store.set('leads',LEADS);call({op:'save',lead:l}).catch(()=>toast('Could not sync. Saved on this device.'))}
+function filtered(){
+  const q=$('q').value.trim().toLowerCase(),st=$('st').value;
+  return LEADS.filter(l=>(!st||l.status===st)&&(!q||(l.name||'').toLowerCase().includes(q)||l.url.toLowerCase().includes(q)));
+}
+function render(){
+  const F=filtered(),size=+$('size').value,pages=Math.max(1,Math.ceil(F.length/size));
+  page=Math.min(page,pages-1);const now=Date.now();
+  $('count').textContent='('+LEADS.length+')';
+  $('msg').textContent=F.length?'':'No leads match.';
+  $('rows').innerHTML='';
+  F.slice(page*size,page*size+size).forEach(l=>{
+    const tr=document.createElement('tr'),a=document.createElement('td');a.textContent=l.name||l.url;
+    const s=document.createElement('td'),sel=document.createElement('select');
+    ['New','Contacted','Replied','Won','Dropped'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
+    sel.onchange=()=>{l.status=sel.value;if(sel.value==='Contacted'&&!l.follow)l.follow=Date.now()+4*DAY;save(l);render()};
+    s.appendChild(sel);
+    const f=document.createElement('td');f.textContent=l.follow?new Date(l.follow).toDateString():'-';
+    if(l.status==='Contacted'&&l.follow&&l.follow<=now)f.className='late';
+    const x=document.createElement('td');x.className='acts';
+    const o=document.createElement('button');o.textContent='Open';o.onclick=()=>{location.href='index.html?open='+encodeURIComponent(l.url)};
+    const b=document.createElement('button');b.className='ghost';b.textContent='Remove';
+    b.onclick=()=>{if(!confirm('Remove '+(l.name||l.url)+'?'))return;LEADS=LEADS.filter(y=>y.url!==l.url);store.set('leads',LEADS);call({op:'delete',url:l.url}).catch(()=>toast('Could not remove online'));render()};
+    x.append(o,b);tr.append(a,s,f,x);$('rows').appendChild(tr);
+  });
+  $('pageInfo').textContent='Page '+(page+1)+' of '+pages+' ('+F.length+' leads)';
+  $('prev').disabled=page===0;$('next').disabled=page>=pages-1;
+}
+['q','st','size'].forEach(i=>$(i).addEventListener('input',()=>{page=0;render()}));
+$('prev').onclick=()=>{page--;render()};$('next').onclick=()=>{page++;render()};
+render();
+if(!store.get('pw','')){$('msg').textContent='Open the main page and enter your password under My settings first.'}
+else call({op:'list'}).then(d=>{LEADS=d.leads;store.set('leads',LEADS);render()}).catch(()=>toast('Could not sync. Showing this device\'s copy.'));
+</script>
+</body>
+</html>
