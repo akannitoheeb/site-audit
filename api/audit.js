@@ -104,10 +104,51 @@ async function askGroq(system, user, key) {
   } catch { return { ok: false, error: 'Could not reach Groq' }; }
 }
 
+async function askAI(system, user) {
+  const order = (process.env.AI_PROVIDER || 'gemini').toLowerCase() === 'groq' ? ['groq', 'gemini'] : ['gemini', 'groq'];
+  const keys = { gemini: process.env.GEMINI_API_KEY, groq: process.env.GROQ_API_KEY };
+  let error = '';
+  for (const p of order) {
+    if (!keys[p]) continue;
+    const out = await (p === 'gemini' ? askGemini : askGroq)(system, user, keys[p]);
+    if (out.ok) {
+      try {
+        return { ok: true, provider: p, json: JSON.parse(out.text.slice(out.text.indexOf('{'), out.text.lastIndexOf('}') + 1)) };
+      } catch { error = error || 'The AI reply could not be read. Try again.'; }
+    } else error = error || out.error;
+  }
+  return { ok: false, error: error || 'No AI key is set.' };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (req.headers['x-app-password'] !== process.env.APP_PASSWORD)
     return res.status(401).json({ error: 'Wrong password' });
+    
+
+  if (req.body?.mode === 'followup') {
+    const b = req.body;
+    const n = b.count || 0;
+    const sys = `You write a short follow-up for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM).
+He already sent the first message below to this store and got no reply. Write follow-up number ${n + 1}.
+Rules:
+- Do not repeat the first pitch. Refer to it lightly (for example "my note last week").
+- Add ONE new bit of value: a quick tip or micro-idea tied to the same observation. Use only facts from the observations given; never add new claims about the store.
+- Make exactly ONE easy ask, and give an easy out ("no worries if it's not a priority").
+- Never guilt-trip. Never use "just checking in" or "bumping this".
+- Email: under 70 words. DM: under 35 words. Simple English, no emojis.
+- ${n >= 1 ? 'This is the last follow-up: close politely and leave the door open.' : 'This is the first follow-up.'}
+${b.voice ? 'Writing style: ' + b.voice : ''}
+Return ONLY JSON: {"email":{"subject":string,"body":string},"dm":string}`;
+    const usr = `Store: ${b.name} (${b.url})
+My services: ${b.services || 'Email marketing strategy and WordPress web design'}
+Observations: ${JSON.stringify(b.observations || [])}
+First email I sent: ${b.firstEmail?.body || ''}
+First DM I sent: ${b.firstDm || ''}`;
+    const out = await askAI(sys, usr);
+    if (!out.ok) return res.status(502).json({ error: out.error });
+    return res.status(200).json({ provider: out.provider, ...out.json });
+  }
 
   const { url, email, social, services, voice } = req.body || {};
   let target;
