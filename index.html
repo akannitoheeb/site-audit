@@ -188,6 +188,7 @@ function show(c){
   chip(s.newsletterOrSubscribeText?'Subscribe text found':'No subscribe text',s.newsletterOrSubscribeText?'ok':'bad');
   chip(s.mobileViewportTag?'Mobile ready':'No mobile tag',s.mobileViewportTag?'ok':'bad');
   chip((s.pageSizeKB||0)+' KB homepage','neu');
+  if(c.provider)chip('Written by '+(c.provider==='groq'?'Groq (backup)':'Gemini'),'neu');
   chip(f.email?'Email found':'No email on the site',f.email?'ok':'bad');
   [['instagram','Instagram'],['facebook','Facebook'],['linkedin','LinkedIn'],['tiktok','TikTok'],['x','X'],['whatsapp','WhatsApp']].forEach(([k,n])=>{
     if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
