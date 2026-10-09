@@ -200,6 +200,7 @@ function show(c){
   (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
   $('email').value=c.to||'';$('social').value=c.profile||'';
   $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('sendMsg').textContent='';$('followMsg').textContent='';
+  count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
 }
 function sync(){
   current.to=$('email').value.trim();current.profile=$('social').value.trim();
