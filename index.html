@@ -107,6 +107,7 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
   <div id="result" hidden>
     <section class="card">
       <h2 id="storeName"></h2>
+      <a id="storeLink" href="#" target="_blank" rel="noopener" class="hint" style="display:inline-block;word-break:break-all"></a>
       <div class="chips" id="chips"></div>
       <ul class="obs" id="obs"></ul>
       <div class="actions"><button class="ghost" id="followBtn" type="button">Draft a follow-up</button><span id="followMsg" class="hint" style="align-self:center"></span></div>
@@ -186,6 +187,7 @@ const chip=(t,c)=>{const s=document.createElement('span');s.className='chip '+c;
 function show(c){
   current=c;const f=c.found||{},s=c.signals||{};
   $('storeName').textContent=c.storeName||c.url;
+  $('storeLink').href=c.url;$('storeLink').textContent=c.url.replace(/^https?:\/\//,'').replace(/\/$/,'')+' ↗';
   $('chips').innerHTML='';
   chip(c.platform,'neu');
   chip(s.emailToolDetected?'Email tool found':'No email tool found',s.emailToolDetected?'ok':'bad');
