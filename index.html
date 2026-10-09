@@ -140,6 +140,7 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
     <p class="hint">Every audit is saved here with its drafts and syncs across your devices. Contacted leads get a follow-up date 4 days out; overdue ones turn red.</p>
     <div class="scroll"><table><thead><tr><th>Store</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <p id="empty" class="hint">No leads yet.</p>
+    <a id="more" class="chip neu" href="all-leads.html" hidden style="display:inline-block;margin-top:12px"></a>
   </section>
 </main>
 <div class="toast" id="toast" role="status"></div>
@@ -221,7 +222,11 @@ $('bulkGo').onclick=async()=>{
   $('bulkGo').disabled=true;let ok=0;const fail=[];
   for(let i=0;i<urls.length;i++){
     $('bulkMsg').textContent='Auditing '+(i+1)+' of '+urls.length+': '+urls[i];
-    try{upsert(await runAudit(urls[i]),'New');ok++}catch(e){fail.push(urls[i]+' - '+e.message)}
+    let c;
+    try{c=await runAudit(urls[i])}catch(e){
+      if(/busy/i.test(e.message)){$('bulkMsg').textContent='AI is busy. Waiting 20 seconds, then retrying '+urls[i]+'...';await new Promise(r=>setTimeout(r,20000));try{c=await runAudit(urls[i])}catch(e2){e=e2}}
+      if(!c)fail.push(urls[i]+' - '+e.message)}
+    if(c){upsert(c,'New');ok++}
     if(i<urls.length-1)await new Promise(r=>setTimeout(r,6000));
   }
   $('bulkMsg').textContent='Done. '+ok+' audited'+(fail.length?', '+fail.length+' failed.':'.')+' Open them from the Leads table below.';
@@ -264,7 +269,7 @@ async function loadLeads(){
     const first=!store.get('migrated',false),have=new Set(d.leads.map(l=>l.url));
     const extra=first?LEADS.filter(l=>!have.has(l.url)):[];
     LEADS=[...d.leads,...extra];extra.forEach(l=>call('/api/leads',{op:'save',lead:l}).catch(()=>{}));
-    store.set('migrated',true);store.set('leads',LEADS);render();
+    store.set('migrated',true);store.set('leads',LEADS);render();openFromUrl();
   }catch(e){toast('Could not sync leads. Showing this device\'s copy.')}
 }
 function render(){
@@ -272,8 +277,8 @@ function render(){
   $('sTotal').textContent=LEADS.length;$('sContacted').textContent=LEADS.filter(l=>l.status==='Contacted').length;
   $('sSent').textContent=sentToday()+'/'+CAP;
   $('sDue').textContent=LEADS.filter(l=>l.status==='Contacted'&&l.follow&&l.follow<=now).length;
-  $('empty').hidden=LEADS.length>0;$('rows').innerHTML='';
-  LEADS.forEach((l,i)=>{
+  $('empty').hidden=LEADS.length>0;$('more').hidden=LEADS.length<=5;$('more').textContent='See all '+LEADS.length+' leads';$('rows').innerHTML='';
+  LEADS.slice(0,5).forEach((l,i)=>{
     const tr=document.createElement('tr');
     const a=document.createElement('td');a.textContent=l.name;
     const s=document.createElement('td'),sel=document.createElement('select');
@@ -289,7 +294,8 @@ function render(){
     x.append(o,b);tr.append(a,s,f,x);$('rows').appendChild(tr);
   });
 }
-LEADS=store.get('leads',[]);render();loadLeads();
+function openFromUrl(){const u=new URLSearchParams(location.search).get('open');if(!u)return;const l=LEADS.find(x=>x.url===u);if(l&&l.data){history.replaceState(null,'',location.pathname);show(l.data)}}
+LEADS=store.get('leads',[]);render();openFromUrl();loadLeads();
 $('pw').addEventListener('change',()=>{store.set('pw',$('pw').value);loadLeads()});
 </script>
 </body>
