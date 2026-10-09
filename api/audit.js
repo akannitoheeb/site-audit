@@ -145,6 +145,18 @@ export default async function handler(req, res) {
   const platform = detect(html);
   const sig = signals(html);
   const text = toText(html);
+  
+    let productText = '';
+  const pm = html.match(/href=["']([^"']*\/products?\/[^"'#?]+)["']/i);
+  if (pm) {
+    try {
+      const pu = new URL(pm[1], target);
+      if (pu.hostname === target.hostname) {
+        const pr = await fetch(pu, { headers: UA, signal: AbortSignal.timeout(8000) });
+        if (pr.ok) productText = toText(await pr.text()).slice(0, 2500);
+      }
+    } catch {}
+  }
 
   const system = `You write outreach for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM, Akanni Toheeb Marketing).
 You audit an online store from the evidence given and draft personal outreach.
@@ -166,6 +178,15 @@ Drafting rules:
 - Simple English, no emojis, no hype words.
 - Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Hey, love the bespoke game sets on The Craft House! Noticed the homepage still shows an 'Offer has expired' banner with the timer at zero. Planning your next campaign soon, or want a quick hand cleaning that up?"
 
+Pitch logic (follow this for every draft):
+1. Pick the single best observation: something concrete the store could fix or gain that Toheeb's services solve.
+2. Open with one genuine compliment on something specific (a product, collection or line of copy), then the observation. Never open with a generic compliment.
+3. Connect the observation to a benefit in plain words (more first orders, fewer abandoned carts, less confusion), not a feature.
+4. Make exactly ONE ask: either a question OR an offer of one small free thing (for example "I can sketch a 3-email welcome flow"). Never both.
+5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items mean restock or waitlist emails; an expired or broken page element means a quick fix; weak product copy means rewrite one product page.
+6. A product page excerpt may be included. Comment on product descriptions only if that excerpt is there.
+7. Before answering, check the draft: is every fact visible in the evidence, is there one ask, and would a stranger understand the point in 5 seconds? Fix it if not.
+
 Return ONLY JSON: {"storeName":string,"observations":[{"issue":string,"evidence":string}],"email":{"subject":string,"body":string},"dm":string}`;
 
   const user = `Store URL: ${target.href}
@@ -173,7 +194,9 @@ Platform detected: ${platform}
 Hints: ${JSON.stringify(sig)}
 My services and offers: ${services || 'Email marketing strategy and WordPress web design'}
 Homepage text (trimmed):
-${text}`;
+${text}
+One product page (trimmed):
+${productText || 'not available'}`;
 
   const order = (process.env.AI_PROVIDER || 'gemini').toLowerCase() === 'groq' ? ['groq', 'gemini'] : ['gemini', 'groq'];
   const keys = { gemini: process.env.GEMINI_API_KEY, groq: process.env.GROQ_API_KEY };
