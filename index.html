@@ -99,6 +99,8 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
       <label for="pw">App password</label><input id="pw" type="password" autocomplete="current-password">
       <label for="services">What I offer (the AI pitches only this)</label>
       <textarea id="services" style="min-height:90px">Email marketing strategy: welcome flows, abandoned cart emails, campaigns. WordPress web design and store improvements.</textarea>
+      <label for="voice">My writing style (optional)</label>
+      <textarea id="voice" style="min-height:70px" placeholder="Example: short sentences, friendly, simple English, no exclamation marks"></textarea>
     </details>
   </section>
 
@@ -158,6 +160,7 @@ theme(store.get('dark',matchMedia('(prefers-color-scheme:dark)').matches));
 $('theme').onclick=()=>{const d=document.documentElement.dataset.theme!=='dark';store.set('dark',d);theme(d)};
 
 $('pw').value=store.get('pw','');$('services').value=store.get('services',$('services').value);
+$('voice').value=store.get('voice','');$('voice').addEventListener('input',()=>store.set('voice',$('voice').value));
 function mode(b){$('single').hidden=b;$('bulk').hidden=!b;$('tSingle').classList.toggle('on',!b);$('tBulk').classList.toggle('on',b);$('err').textContent=''}
 $('tSingle').onclick=()=>mode(false);$('tBulk').onclick=()=>mode(true);
 
@@ -173,7 +176,7 @@ async function call(path,payload){
 }
 async function runAudit(url){
   url=norm(url.trim());
-  const d=await call('/api/audit',{url,services:$('services').value});
+  const d=await call('/api/audit',{url,services:$('services').value,voice:$('voice').value});
   const f=d.found||{};
   return {...d,url,to:f.email||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
 }
