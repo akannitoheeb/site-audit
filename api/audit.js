@@ -57,7 +57,7 @@ function findContacts(html, host) {
   return out;
 }
 
-async function postRetry(url, opts, tries = 3) {
+async function postRetry(url, opts, tries = 2) {
   let r;
   for (let i = 0; i < tries; i++) {
     r = await fetch(url, opts);
@@ -65,6 +65,43 @@ async function postRetry(url, opts, tries = 3) {
     await new Promise((x) => setTimeout(x, 2000 * (i + 1)));
   }
   return r;
+}
+
+const friendly = (s, m) => ([429, 503].includes(s) ? 'The AI service is busy right now. Wait a minute and try again.' : m || 'AI request failed');
+
+async function askGemini(system, user, key) {
+  try {
+    const model = process.env.AI_MODEL || 'gemini-3.8-flash';
+    const r = await postRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, error: friendly(r.status, d?.error?.message) };
+    return { ok: true, text: (d.candidates?.[0]?.content?.parts || []).map((x) => x.text || '').join('') };
+  } catch { return { ok: false, error: 'Could not reach Gemini' }; }
+}
+
+async function askGroq(system, user, key) {
+  try {
+    const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    const r = await postRetry('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model, temperature: 0.4, response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, error: friendly(r.status, d?.error?.message) };
+    return { ok: true, text: d.choices?.[0]?.message?.content || '' };
+  } catch { return { ok: false, error: 'Could not reach Groq' }; }
 }
 
 export default async function handler(req, res) {
@@ -135,42 +172,18 @@ My services and offers: ${services || 'Email marketing strategy and WordPress we
 Homepage text (trimmed):
 ${text}`;
 
-  const provider = (process.env.AI_PROVIDER || 'groq').toLowerCase();
-  try {
-    let raw = '';
-    if (provider === 'gemini') {
-      const model = process.env.AI_MODEL || 'gemini-3.8-flash';
-      const r = await postRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: 'user', parts: [{ text: user }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok) return res.status(502).json({ error: [429, 503].includes(r.status) ? 'The AI service is busy right now. Wait a minute and try again.' : (d?.error?.message || 'AI request failed') });
-      raw = (d.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-    } else {
-      const model = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
-      const r = await postRetry('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-        body: JSON.stringify({
-          model,
-          temperature: 0.4,
-          response_format: { type: 'json_object' },
-          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok) return res.status(502).json({ error: [429, 503].includes(r.status) ? 'The AI service is busy right now. Wait a minute and try again.' : (d?.error?.message || 'AI request failed') });
-      raw = d.choices?.[0]?.message?.content || '';
-    }
-    const json = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
-    return res.status(200).json({ platform, signals: sig, found, ...json });
-  } catch {
-    return res.status(500).json({ error: 'The AI reply could not be read. Try again.' });
+  const order = (process.env.AI_PROVIDER || 'gemini').toLowerCase() === 'groq' ? ['groq', 'gemini'] : ['gemini', 'groq'];
+  const keys = { gemini: process.env.GEMINI_API_KEY, groq: process.env.GROQ_API_KEY };
+  let firstError = '';
+  for (const p of order) {
+    if (!keys[p]) continue;
+    const out = await (p === 'gemini' ? askGemini : askGroq)(system, user, keys[p]);
+    if (out.ok) {
+      try {
+        const json = JSON.parse(out.text.slice(out.text.indexOf('{'), out.text.lastIndexOf('}') + 1));
+        return res.status(200).json({ platform, signals: sig, found, provider: p, ...json });
+      } catch { firstError = firstError || 'The AI reply could not be read. Try again.'; }
+    } else firstError = firstError || out.error;
   }
+  return res.status(502).json({ error: firstError || 'No AI key is set. Add GEMINI_API_KEY or GROQ_API_KEY in Vercel.' });
 }
