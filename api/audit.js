@@ -109,7 +109,7 @@ export default async function handler(req, res) {
   if (req.headers['x-app-password'] !== process.env.APP_PASSWORD)
     return res.status(401).json({ error: 'Wrong password' });
 
-  const { url, email, social, services } = req.body || {};
+  const { url, email, social, services, voice } = req.body || {};
   let target;
   try {
     target = new URL(url);
@@ -193,6 +193,7 @@ Return ONLY JSON: {"storeName":string,"observations":[{"issue":string,"evidence"
 Platform detected: ${platform}
 Hints: ${JSON.stringify(sig)}
 My services and offers: ${services || 'Email marketing strategy and WordPress web design'}
+My writing style: ${voice || 'friendly, plain, short sentences'}
 Homepage text (trimmed):
 ${text}
 One product page (trimmed):
