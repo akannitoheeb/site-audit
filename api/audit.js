@@ -15,25 +15,53 @@ const SOCIAL = {
 
 const TONE = `Voice: write like a seasoned consultant with decades of experience in email marketing and web design: calm, mature, precise and respectful. Never mention a number of years of experience. Never be blunt, rude, sarcastic or pushy. Always begin with a proper greeting ("Good day," or "Hello team at [Store],") and close courteously ("Warm regards, Toheeb"). Frame every observation as an opportunity and respect the store's work. No slang, no "Hey", no emojis.`;
 
-function normalizePhone(raw) {
-  let d = String(raw).replace(/\(0\)/g, '').replace(/[^\d+]/g, '');
-  if (d.startsWith('+')) d = d.slice(1);
-  else if (d.startsWith('00')) d = d.slice(2);
-  else if (/^0[789][01]\d{8}$/.test(d)) d = '234' + d.slice(1); // Nigerian local format
-  else return null;
-  return /^\d{10,15}$/.test(d) ? d : null;
+// Country codes we know how to recognise, and what a store's web address tells us about its country
+const KNOWN_CC = ['234', '233', '254', '353', '44', '61', '27', '1'];
+const TLD_CC = { ng: '234', gh: '233', ke: '254', ie: '353', uk: '44', au: '61', za: '27', ca: '1', us: '1' };
+const ccOf = (d) => KNOWN_CC.find((c) => d.startsWith(c)) || '';
+
+// Turns any phone format into digits with the country code (no +). Returns null if it does not look like a real number.
+function normalizePhone(raw, cc = '') {
+  const t = String(raw).replace(/\(0\)/g, '').trim();
+  const digits = t.replace(/\D/g, '');
+  if (t.startsWith('+') || t.startsWith('00')) {
+    const d = t.startsWith('+') ? digits : digits.slice(2);
+    return /^[1-9]\d{7,14}$/.test(d) && (t.startsWith('+') || d.length >= 10) ? d : null; // already has a country code: keep it as it is
+  }
+  // US / Canada style: (415) 555-0123, 415-555-0123, 1-800-555-0123
+  if (/^1?[2-9]\d{2}[2-9]\d{6}$/.test(digits) && (cc === '1' || !cc || /[()\s.-]/.test(t))) return '1' + digits.slice(-10);
+  // Local format starting with 0 (Nigeria, UK and similar): the store's country decides the code
+  if (/^0\d{9,10}$/.test(digits)) {
+    const guess = /^0[789][01]\d{8}$/.test(digits) ? '234' : /^0(7[1-57-9]\d{8}|[123]\d{9})$/.test(digits) ? '44' : '';
+    const country = (cc && cc !== '1' ? cc : '') || guess;
+    if (country) return country + digits.slice(1);
+  }
+  return null;
 }
 
-function findPhone(html) {
-  const cands = [];
+// Finds every phone number on the page, best sources first, in any country format
+function findPhones(html, host) {
+  let cc = TLD_CC[host.split('.').pop().toLowerCase()] || '';
+  const strong = [], weak = [];
   for (const m of html.matchAll(/href=["']tel:([^"']+)["']/gi)) {
-    try { cands.push(decodeURIComponent(m[1])); } catch { cands.push(m[1]); }
+    try { strong.push(decodeURIComponent(m[1])); } catch { strong.push(m[1]); }
   }
-  for (const m of html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\/?\?phone=)(\d{8,15})/gi)) cands.push('+' + m[1]);
-  const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ');
-  for (const m of text.matchAll(/\+\d{1,3}[\s-]?\d[\d\s-]{7,13}\d|\b0[789][01]\d[\s-]?\d{3}[\s-]?\d{4}\b/g)) cands.push(m[0]);
-  for (const c of cands) { const n = normalizePhone(c); if (n) return n; }
-  return null;
+  for (const m of html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\/?\?phone=)(\d{8,15})/gi)) strong.push('+' + m[1]);
+  for (const m of html.matchAll(/"telephone"\s*:\s*"([^"]+)"/gi)) strong.push(m[1]);
+  const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  for (const m of text.matchAll(/\+\d{1,3}[\s().-]*\d[\d\s().-]{6,16}\d/g)) strong.push(m[0]);
+  for (const m of text.matchAll(/(?<!\d)00[1-9]\d{0,2}[\s().-]*\d[\d\s().-]{6,16}\d/g)) strong.push(m[0]);
+  for (const m of text.matchAll(/(?<!\d)(?:\+?1[\s.-]?)?\(?[2-9]\d{2}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g)) weak.push(m[0]);
+  for (const m of text.matchAll(/\b0\d{2,4}[\s.-]?\d{3,4}[\s.-]?\d{3,4}\b/g)) weak.push(m[0]);
+  if (!cc) { // no hint from the web address, so learn the country from the first number that has a code
+    for (const c of strong) { if (/^\s*(\+|00)/.test(c)) { const d = normalizePhone(c); if (d) { cc = ccOf(d); break; } } }
+  }
+  const out = [];
+  for (const c of [...strong, ...weak]) {
+    const n = normalizePhone(c, cc);
+    if (n && !out.some((m) => m.slice(-10) === n.slice(-10))) out.push(n); // skip repeats and the same number written two ways
+  }
+  return out.slice(0, 5);
 }
 
 function detect(html) {
@@ -76,7 +104,8 @@ function findContacts(html, host) {
   const list = [...found].filter((e) => !JUNK.test(e));
   const base = host.replace(/^www\./, '');
   const out = { email: list.find((e) => e.split('@')[1] === base) || list[0] || null };
-  out.phone = findPhone(html);
+  out.phones = findPhones(html, host);
+  out.phone = out.phones[0] || null;
   for (const [k, re] of Object.entries(SOCIAL)) out[k] = (html.match(re) || [])[0] || null;
   return out;
 }
