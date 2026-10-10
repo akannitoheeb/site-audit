@@ -190,7 +190,7 @@ async function runAudit(url){
   url=norm(url.trim());
   const d=await call('/api/audit',{url,services:$('services').value,voice:$('voice').value});
   const f=d.found||{};
-  return {...d,url,to:f.email||'',phone:f.phone||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
+  return {...d,url,auditedAt:Date.now(),to:f.email||'',phone:f.phone||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
 }
 
 const chip=(t,c)=>{const s=document.createElement('span');s.className='chip '+c;s.textContent=t;$('chips').appendChild(s)};
@@ -311,6 +311,13 @@ async function loadLeads(){
     store.set('migrated',true);store.set('leads',LEADS);render();openFromUrl();
   }catch(e){toast('Could not sync leads. Showing this device\'s copy.')}
 }
+function ago(t){const s=Math.max(0,Math.round((Date.now()-t)/1000));if(s<45)return 'just now';const m=Math.round(s/60);if(m<60)return m+(m===1?' min ago':' mins ago');const h=Math.round(m/60);if(h<24)return h+(h===1?' hr ago':' hrs ago');const d=Math.round(h/24);return d+(d===1?' day ago':' days ago')}
+function clock(t){const d=new Date(t),tm=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});return d.toDateString()===new Date().toDateString()?tm:d.toLocaleDateString([],{month:'short',day:'numeric'})+', '+tm}
+function leadTime(l){return (l.data&&l.data.auditedAt)||(l.updated_at?Date.parse(l.updated_at):0)||0}
+function timeCell(td,l){const t=leadTime(l);if(!t)return;const e=l.emailed;
+  const sm=document.createElement('div');sm.className='hint';sm.style.cssText='font-size:12px;margin-top:2px';sm.dataset.t=t;sm.dataset.e=e||'';
+  const draw=()=>{sm.textContent='Audited '+ago(t)+' · '+clock(t)+(e?' · Emailed '+clock(e):'')};draw();sm._draw=draw;td.appendChild(sm)}
+setInterval(()=>document.querySelectorAll('[data-t]').forEach(x=>x._draw&&x._draw()),30000);
 function render(){
   const now=Date.now();
   $('sTotal').textContent=LEADS.length;$('sContacted').textContent=LEADS.filter(l=>l.status==='Contacted').length;
@@ -319,7 +326,7 @@ function render(){
   $('empty').hidden=LEADS.length>0;$('more').hidden=LEADS.length<=5;$('more').textContent='See all '+LEADS.length+' leads';$('rows').innerHTML='';
   LEADS.slice(0,5).forEach((l,i)=>{
     const tr=document.createElement('tr');
-    const a=document.createElement('td');a.textContent=l.name;
+    const a=document.createElement('td');a.textContent=l.name;timeCell(a,l);
     const s=document.createElement('td'),sel=document.createElement('select');
     ['New','Contacted','Replied','Won','Dropped'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
     sel.onchange=()=>{l.status=sel.value;if(sel.value==='Contacted'&&!l.follow)l.follow=Date.now()+4*DAY;saveLead(l);render()};
