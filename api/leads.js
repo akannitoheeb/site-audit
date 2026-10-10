@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   try {
     let r;
     if (op === 'list') {
-      r = await fetch(`${base}?select=url,name,status,follow,emailed,data&order=updated_at.desc&limit=1000`, { headers: h });
+      r = await fetch(`${base}?select=url,name,status,follow,emailed,updated_at,data&order=updated_at.desc&limit=1000`, { headers: h });
       const rows = await r.json();
       if (!r.ok) return res.status(502).json({ error: rows?.message || 'Could not load leads' });
       return res.status(200).json({ leads: rows });
