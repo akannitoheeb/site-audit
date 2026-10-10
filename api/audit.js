@@ -13,6 +13,29 @@ const SOCIAL = {
   whatsapp: /https?:\/\/(?:wa\.me\/\d+|api\.whatsapp\.com\/send\?phone=\d+)/i,
 };
 
+const TONE = `Voice: write like a seasoned consultant with decades of experience in email marketing and web design: calm, mature, precise and respectful. Never mention a number of years of experience. Never be blunt, rude, sarcastic or pushy. Always begin with a proper greeting ("Good day," or "Hello team at [Store],") and close courteously ("Warm regards, Toheeb"). Frame every observation as an opportunity and respect the store's work. No slang, no "Hey", no emojis.`;
+
+function normalizePhone(raw) {
+  let d = String(raw).replace(/\(0\)/g, '').replace(/[^\d+]/g, '');
+  if (d.startsWith('+')) d = d.slice(1);
+  else if (d.startsWith('00')) d = d.slice(2);
+  else if (/^0[789][01]\d{8}$/.test(d)) d = '234' + d.slice(1); // Nigerian local format
+  else return null;
+  return /^\d{10,15}$/.test(d) ? d : null;
+}
+
+function findPhone(html) {
+  const cands = [];
+  for (const m of html.matchAll(/href=["']tel:([^"']+)["']/gi)) {
+    try { cands.push(decodeURIComponent(m[1])); } catch { cands.push(m[1]); }
+  }
+  for (const m of html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\/?\?phone=)(\d{8,15})/gi)) cands.push('+' + m[1]);
+  const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  for (const m of text.matchAll(/\+\d{1,3}[\s-]?\d[\d\s-]{7,13}\d|\b0[789][01]\d[\s-]?\d{3}[\s-]?\d{4}\b/g)) cands.push(m[0]);
+  for (const c of cands) { const n = normalizePhone(c); if (n) return n; }
+  return null;
+}
+
 function detect(html) {
   const h = html.toLowerCase();
   if (h.includes('cdn.shopify.com') || h.includes('shopify.theme')) return 'Shopify';
@@ -53,6 +76,7 @@ function findContacts(html, host) {
   const list = [...found].filter((e) => !JUNK.test(e));
   const base = host.replace(/^www\./, '');
   const out = { email: list.find((e) => e.split('@')[1] === base) || list[0] || null };
+  out.phone = findPhone(html);
   for (const [k, re] of Object.entries(SOCIAL)) out[k] = (html.match(re) || [])[0] || null;
   return out;
 }
@@ -94,7 +118,7 @@ async function askGroq(system, user, key) {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model, temperature: 0.4, response_format: { type: 'json_object' },
+        model, temperature: 0.3, response_format: { type: 'json_object' },
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
       }),
     });
@@ -130,21 +154,23 @@ export default async function handler(req, res) {
     const b = req.body;
     const n = b.count || 0;
     const sys = `You write a short follow-up for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM).
+${TONE}
 He already sent the first message below to this store and got no reply. Write follow-up number ${n + 1}.
 Rules:
 - Do not repeat the first pitch. Refer to it lightly (for example "my note last week").
 - Add ONE new bit of value: a quick tip or micro-idea tied to the same observation. Use only facts from the observations given; never add new claims about the store.
 - Make exactly ONE easy ask, and give an easy out ("no worries if it's not a priority").
 - Never guilt-trip. Never use "just checking in" or "bumping this".
-- Email: under 70 words. DM: under 35 words. Simple English, no emojis.
+- Email: under 70 words. DM: under 45 words. WhatsApp: under 60 words. Simple English, no emojis.
 - ${n >= 1 ? 'This is the last follow-up: close politely and leave the door open.' : 'This is the first follow-up.'}
 ${b.voice ? 'Writing style: ' + b.voice : ''}
-Return ONLY JSON: {"email":{"subject":string,"body":string},"dm":string}`;
+Return ONLY JSON: {"email":{"subject":string,"body":string},"dm":string,"whatsapp":string}`;
     const usr = `Store: ${b.name} (${b.url})
 My services: ${b.services || 'Email marketing strategy and WordPress web design'}
 Observations: ${JSON.stringify(b.observations || [])}
 First email I sent: ${b.firstEmail?.body || ''}
-First DM I sent: ${b.firstDm || ''}`;
+First DM I sent: ${b.firstDm || ''}
+First WhatsApp I sent: ${b.firstWa || ''}`;
     const out = await askAI(sys, usr);
     if (!out.ok) return res.status(502).json({ error: out.error });
     return res.status(200).json({ provider: out.provider, ...out.json });
@@ -202,6 +228,8 @@ First DM I sent: ${b.firstDm || ''}`;
   const system = `You write outreach for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM, Akanni Toheeb Marketing).
 You audit an online store from the evidence given and draft personal outreach.
 
+${TONE}
+
 Evidence rules (most important):
 - You only see the raw page code and text. Content loaded by JavaScript is invisible to you: reviews, popups, chat widgets, product grids, email forms. NEVER claim any of these are missing. If something may simply be hidden from you, skip it or phrase it as a question.
 - "emailToolDetected: false" only means no known email tool appeared in the page code. Treat it as a soft hint, never as proof the store has no email marketing.
@@ -212,29 +240,30 @@ Relevance rules:
 - Only raise things Toheeb could actually help with given his services: email capture and flows, copywriting, product page clarity, store design, trust and conversion. Ignore the store's business model, pricing, or how its own product works.
 
 Drafting rules:
-- Email: under 130 words, plain and friendly, no hype, mention one or two solid observations, offer one clear next step, sign off as Toheeb. Do not add an unsubscribe line (the app adds it).
-- DM: 35 to 60 words, casual and warm. Name ONE specific thing you saw on this store, then ask one easy question or offer one quick helpful idea.
-- Both the email and the DM must point to something concrete from this store. Never use vague filler such as "I help with that stuff", "saw your site", or "let me know".
+- Email: under 130 words, warm and professional, no hype. Greet properly, mention one or two solid observations, offer one clear next step, close with "Warm regards, Toheeb". Do not add an unsubscribe line (the app adds it).
+- DM: 45 to 70 words. Greet properly, name ONE specific thing you saw on this store, then ask one easy question or offer one quick helpful idea.
+- WhatsApp: 60 to 90 words. The store does not know this number, so greet properly, then introduce yourself in one line ("This is Toheeb from ATM. I help online stores with email marketing and website design."). Name ONE specific thing you saw, make ONE ask, then add a courteous line saying they can simply tell you if they would rather not be messaged. Close with "Warm regards, Toheeb". No links.
+- All three must point to something concrete from this store. Never use vague filler such as "I help with that stuff", "saw your site", or "let me know".
 - If something might just be hidden from you (popups, reviews, email forms), ask a question about it instead of saying it is missing.
-- Simple English, no emojis, no hype words.
-- Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Hey, love the bespoke game sets on The Craft House! Noticed the homepage still shows an 'Offer has expired' banner with the timer at zero. Planning your next campaign soon, or want a quick hand cleaning that up?"
+- Simple English, no emojis, no hype words, no slang.
+- Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Good day, I admired the bespoke game sets on The Craft House. I noticed the homepage still shows an expired-offer banner with the timer at zero. Are you planning a new campaign soon? I would be glad to help tidy that up."
 
 Pitch logic (follow this for every draft):
 1. Pick the single best observation: something concrete the store could fix or gain that Toheeb's services solve.
-2. Open with one genuine compliment on something specific (a product, collection or line of copy), then the observation. Never open with a generic compliment.
+2. After the greeting, open with one genuine compliment on something specific (a product, collection or line of copy), then the observation. Never open with a generic compliment.
 3. Connect the observation to a benefit in plain words (more first orders, fewer abandoned carts, less confusion), not a feature.
 4. Make exactly ONE ask: either a question OR an offer of one small free thing (for example "I can sketch a 3-email welcome flow"). Never both.
 5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items mean restock or waitlist emails; an expired or broken page element means a quick fix; weak product copy means rewrite one product page.
 6. A product page excerpt may be included. Comment on product descriptions only if that excerpt is there.
 7. Before answering, check the draft: is every fact visible in the evidence, is there one ask, and would a stranger understand the point in 5 seconds? Fix it if not.
 
-Return ONLY JSON: {"storeName":string,"observations":[{"issue":string,"evidence":string}],"email":{"subject":string,"body":string},"dm":string}`;
+Return ONLY JSON in exactly this shape: {"storeName":string,"observations":[{"issue":string,"evidence":string}],"email":{"subject":string,"body":string},"dm":string,"whatsapp":string}`;
 
   const user = `Store URL: ${target.href}
 Platform detected: ${platform}
 Hints: ${JSON.stringify(sig)}
 My services and offers: ${services || 'Email marketing strategy and WordPress web design'}
-My writing style: ${voice || 'friendly, plain, short sentences'}
+My writing style: ${voice || 'warm, professional, respectful'}
 Homepage text (trimmed):
 ${text}
 One product page (trimmed):
