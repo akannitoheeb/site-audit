@@ -38,7 +38,7 @@ td.acts{white-space:nowrap}td.acts button{margin-right:6px;padding:6px 12px}
 <main><section class="card">
   <div class="bar">
     <input id="q" type="search" placeholder="Search store name or link" aria-label="Search">
-    <select id="st" aria-label="Status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Replied</option><option>Won</option><option>Dropped</option></select>
+    <select id="st" aria-label="Status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Replied</option><option>Won</option><option>Dropped</option><option value="__nc">No contact found</option></select>
     <select id="size" aria-label="Per page"><option value="50">50 per page</option><option value="100">100 per page</option><option value="200">200 per page</option><option value="500">500 per page</option></select>
   </div>
   <p id="msg" class="hint"></p>
@@ -57,6 +57,8 @@ function timeCell(td,l){const t=leadTime(l);if(!t)return;const e=l.emailed;
   const sm=document.createElement('div');sm.className='hint';sm.style.cssText='font-size:12px;margin-top:2px';sm.dataset.t=t;sm.dataset.e=e||'';
   const draw=()=>{sm.textContent='Audited '+ago(t)+' · '+clock(t)+(e?' · Emailed '+clock(e):'')};draw();sm._draw=draw;td.appendChild(sm)}
 setInterval(()=>document.querySelectorAll('[data-t]').forEach(x=>x._draw&&x._draw()),30000);
+const hasContact=c=>{const f=(c&&c.found)||{};return !!((c&&(c.to||c.phone||c.profile))||f.email||f.phone||f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||f.whatsapp)};
+const noContact=l=>l.status==='New'&&!!l.data&&!!l.data.found&&!hasContact(l.data);
 let LEADS=store.get('leads',[]),page=0;
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
 async function call(payload){
@@ -66,12 +68,12 @@ async function call(payload){
 function save(l){store.set('leads',LEADS);call({op:'save',lead:l}).catch(()=>toast('Could not sync. Saved on this device.'))}
 function filtered(){
   const q=$('q').value.trim().toLowerCase(),st=$('st').value;
-  return LEADS.filter(l=>(!st||l.status===st)&&(!q||(l.name||'').toLowerCase().includes(q)||l.url.toLowerCase().includes(q)));
+  return LEADS.filter(l=>(st==='__nc'?noContact(l):(!noContact(l)&&(!st||l.status===st)))&&(!q||(l.name||'').toLowerCase().includes(q)||l.url.toLowerCase().includes(q)));
 }
 function render(){
   const F=filtered(),size=+$('size').value,pages=Math.max(1,Math.ceil(F.length/size));
   page=Math.min(page,pages-1);const now=Date.now();
-  $('count').textContent='('+LEADS.length+')';
+  $('count').textContent='('+LEADS.filter(l=>!noContact(l)).length+')';
   $('msg').textContent=F.length?'':'No leads match.';
   $('rows').innerHTML='';
   F.slice(page*size,page*size+size).forEach(l=>{
