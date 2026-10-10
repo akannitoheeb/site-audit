@@ -137,6 +137,16 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
         <div class="actions"><button class="ghost" id="copyDm">Copy DM</button><button class="ghost" id="openSocial">Open profile</button><button class="ghost" id="markDm">Mark sent</button></div>
       </section>
     </div>
+    <section class="card">
+      <h2>WhatsApp draft</h2>
+      <p class="hint">Opens WhatsApp with the message ready. You review and tap send yourself.</p>
+      <label for="wa">Their WhatsApp number (auto-filled if the store shows one)</label>
+      <input id="wa" type="tel" inputmode="tel" placeholder="2348012345678">
+      <label for="waMsg">Message</label>
+      <textarea id="waMsg" style="min-height:140px"></textarea>
+      <div class="count" id="waCount"></div>
+      <div class="actions"><button id="openWa">Open in WhatsApp</button><button class="ghost" id="copyWa">Copy</button><button class="ghost" id="markWa">Mark sent</button></div>
+    </section>
   </div>
 
   <section class="card">
@@ -168,7 +178,7 @@ $('tSingle').onclick=()=>mode(false);$('tBulk').onclick=()=>mode(true);
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
 function setStep(n){[...$('steps').children].forEach((li,i)=>{li.className=i<n?'done':i===n?'on':''})}
-function count(){$('bodyCount').textContent=wc($('body').value)+' words (aim for under 130)';$('dmCount').textContent=wc($('dm').value)+' words (aim for under 60)'}
+function count(){$('bodyCount').textContent=wc($('body').value)+' words (aim for under 130)';$('dmCount').textContent=wc($('dm').value)+' words (aim for under 70)';$('waCount').textContent=wc($('waMsg').value)+' words (aim for under 90)'}
 
 async function call(path,payload){
   const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-app-password':$('pw').value},body:JSON.stringify(payload)});
@@ -180,7 +190,7 @@ async function runAudit(url){
   url=norm(url.trim());
   const d=await call('/api/audit',{url,services:$('services').value,voice:$('voice').value});
   const f=d.found||{};
-  return {...d,url,to:f.email||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
+  return {...d,url,to:f.email||'',phone:f.phone||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
 }
 
 const chip=(t,c)=>{const s=document.createElement('span');s.className='chip '+c;s.textContent=t;$('chips').appendChild(s)};
@@ -196,20 +206,22 @@ function show(c){
   chip((s.pageSizeKB||0)+' KB homepage','neu');
   if(c.provider)chip('Written by '+(c.provider==='groq'?'Groq (backup)':'Gemini'),'neu');
   chip(f.email?'Email found':'No email on the site',f.email?'ok':'bad');
+  chip(f.phone?'Phone found':'No phone on the site',f.phone?'ok':'bad');
   [['instagram','Instagram'],['facebook','Facebook'],['linkedin','LinkedIn'],['tiktok','TikTok'],['x','X'],['whatsapp','WhatsApp']].forEach(([k,n])=>{
     if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
   $('obs').innerHTML='';
   (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
   $('email').value=c.to||'';$('social').value=c.profile||'';
-  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('sendMsg').textContent='';$('followMsg').textContent='';
+  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone||'';$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';
   count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
 }
 function sync(){
   current.to=$('email').value.trim();current.profile=$('social').value.trim();
   current.email={subject:$('subj').value,body:$('body').value};current.dm=$('dm').value;
+  current.phone=$('wa').value.trim();current.whatsapp=$('waMsg').value;
 }
-['email','social','subj','body','dm'].forEach(i=>$(i).addEventListener('change',()=>{if(current){sync();upsert(current)}}));
-['body','dm'].forEach(i=>$(i).addEventListener('input',count));
+['email','social','subj','body','dm','wa','waMsg'].forEach(i=>$(i).addEventListener('change',()=>{if(current){sync();upsert(current)}}));
+['body','dm','waMsg'].forEach(i=>$(i).addEventListener('input',count));
 
 $('go').onclick=async()=>{
   $('err').textContent='';store.set('pw',$('pw').value);store.set('services',$('services').value);
@@ -256,6 +268,11 @@ $('copyMail').onclick=()=>{navigator.clipboard.writeText($('subj').value+'\n\n'+
 $('copyDm').onclick=()=>{navigator.clipboard.writeText($('dm').value);toast('DM copied')};
 $('openSocial').onclick=()=>{const u=$('social').value.trim();u?window.open(norm(u),'_blank','noopener'):toast('Paste their profile link first')};
 $('markDm').onclick=()=>{sync();upsert(current,'Contacted');toast('Marked as contacted')};
+const waNum=()=>{let d=$('wa').value.replace(/\D/g,'');if(/^0[789][01]\d{8}$/.test(d))d='234'+d.slice(1);return d};
+$('openWa').onclick=()=>{const n=waNum();if(n.length<10){toast('Add their WhatsApp number first');return}
+  window.open('https://wa.me/'+n+'?text='+encodeURIComponent($('waMsg').value),'_blank','noopener')};
+$('copyWa').onclick=()=>{navigator.clipboard.writeText($('waMsg').value);toast('WhatsApp message copied')};
+$('markWa').onclick=()=>{sync();upsert(current,'Contacted');toast('Marked as contacted')};
 const name=()=>current.storeName||current.url;
 $('findMail').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' contact email'),'_blank','noopener');
 $('findSocial').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' instagram'),'_blank','noopener');
@@ -264,13 +281,13 @@ function saveLead(l){store.set('leads',LEADS);call('/api/leads',{op:'save',lead:
 $('followBtn').onclick=async()=>{
   if(!current)return;
   sync();
-  const first=current.first||{email:current.email,dm:current.dm},n=current.followups||0;
+  const first=current.first||{email:current.email,dm:current.dm,whatsapp:current.whatsapp},n=current.followups||0;
   if(n>=2){$('followMsg').textContent='Two follow-ups is enough. Move on to the next store.';return}
   $('followBtn').disabled=true;$('followMsg').textContent='Writing...';
   try{
-    const d=await call('/api/audit',{mode:'followup',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,count:n,services:$('services').value,voice:($('voice')||{}).value||''});
-    current.first=first;current.followups=n+1;current.email=d.email;current.dm=d.dm;
-    $('subj').value=d.email?.subject||'';$('body').value=d.email?.body||'';$('dm').value=d.dm||'';
+    const d=await call('/api/audit',{mode:'followup',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,firstWa:first.whatsapp,count:n,services:$('services').value,voice:($('voice')||{}).value||''});
+    current.first=first;current.followups=n+1;current.email=d.email;current.dm=d.dm;current.whatsapp=d.whatsapp;
+    $('subj').value=d.email?.subject||'';$('body').value=d.email?.body||'';$('dm').value=d.dm||'';$('waMsg').value=d.whatsapp||'';
     count();upsert(current);
     $('followMsg').textContent='Follow-up '+(n+1)+' is ready. Review it, then send or copy.';
   }catch(e){$('followMsg').textContent=e.message}
