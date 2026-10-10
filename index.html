@@ -74,7 +74,7 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
   <div class="stats">
     <div class="stat"><b id="sTotal">0</b><span>Stores audited</span></div>
     <div class="stat"><b id="sContacted">0</b><span>Contacted</span></div>
-    <div class="stat"><b id="sSent">0/25</b><span>Emails sent today</span></div>
+    <div class="stat"><b id="sSent">0/100</b><span>Emails sent today</span></div>
     <div class="stat due"><b id="sDue">0</b><span>Follow-ups due</span></div>
   </div>
   <ol class="steps" id="steps"><li class="on">1 Add store</li><li>2 Audit</li><li>3 Review drafts</li><li>4 Send</li></ol>
@@ -160,7 +160,7 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
 <div class="toast" id="toast" role="status"></div>
 
 <script>
-const $=i=>document.getElementById(i),CAP=25,DAY=864e5;
+const $=i=>document.getElementById(i),CAP=100,DAY=864e5;
 let current=null;
 let LEADS=[];
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
