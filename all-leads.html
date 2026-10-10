@@ -50,6 +50,13 @@ td.acts{white-space:nowrap}td.acts button{margin-right:6px;padding:6px 12px}
 const $=i=>document.getElementById(i),DAY=864e5;
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 document.documentElement.dataset.theme=store.get('dark',matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light';
+function ago(t){const s=Math.max(0,Math.round((Date.now()-t)/1000));if(s<45)return 'just now';const m=Math.round(s/60);if(m<60)return m+(m===1?' min ago':' mins ago');const h=Math.round(m/60);if(h<24)return h+(h===1?' hr ago':' hrs ago');const d=Math.round(h/24);return d+(d===1?' day ago':' days ago')}
+function clock(t){const d=new Date(t),tm=d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});return d.toDateString()===new Date().toDateString()?tm:d.toLocaleDateString([],{month:'short',day:'numeric'})+', '+tm}
+function leadTime(l){return (l.data&&l.data.auditedAt)||(l.updated_at?Date.parse(l.updated_at):0)||0}
+function timeCell(td,l){const t=leadTime(l);if(!t)return;const e=l.emailed;
+  const sm=document.createElement('div');sm.className='hint';sm.style.cssText='font-size:12px;margin-top:2px';sm.dataset.t=t;sm.dataset.e=e||'';
+  const draw=()=>{sm.textContent='Audited '+ago(t)+' · '+clock(t)+(e?' · Emailed '+clock(e):'')};draw();sm._draw=draw;td.appendChild(sm)}
+setInterval(()=>document.querySelectorAll('[data-t]').forEach(x=>x._draw&&x._draw()),30000);
 let LEADS=store.get('leads',[]),page=0;
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
 async function call(payload){
@@ -68,7 +75,7 @@ function render(){
   $('msg').textContent=F.length?'':'No leads match.';
   $('rows').innerHTML='';
   F.slice(page*size,page*size+size).forEach(l=>{
-    const tr=document.createElement('tr'),a=document.createElement('td');a.textContent=l.name||l.url;
+    const tr=document.createElement('tr'),a=document.createElement('td');a.textContent=l.name||l.url;timeCell(a,l);
     const s=document.createElement('td'),sel=document.createElement('select');
     ['New','Contacted','Replied','Won','Dropped'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
     sel.onchange=()=>{l.status=sel.value;if(sel.value==='Contacted'&&!l.follow)l.follow=Date.now()+4*DAY;save(l);render()};
