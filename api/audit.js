@@ -173,6 +173,21 @@ async function askAI(system, user) {
   return { ok: false, error: error || 'No AI key is set.' };
 }
 
+// Shopify publishes real stock data for every product at <product link>.js.
+// Page text cannot be trusted for this: themes keep hidden "Sold out" labels in the page even when an item is in stock.
+async function checkStock(pu) {
+  try {
+    const r = await fetch(new URL(pu.pathname.replace(/\/$/, '') + '.js', pu.origin), { headers: UA, signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return 'not checked';
+    const p = await r.json();
+    const vs = Array.isArray(p.variants) ? p.variants : [];
+    if (!vs.length && typeof p.available !== 'boolean') return 'not checked';
+    const n = vs.filter((v) => v.available).length;
+    if (!p.available) return 'SOLD OUT (no variant is available)';
+    return n === vs.length ? 'IN STOCK (all variants available)' : `IN STOCK (${n} of ${vs.length} variants available)`;
+  } catch { return 'not checked'; }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (req.headers['x-app-password'] !== process.env.APP_PASSWORD)
@@ -242,7 +257,7 @@ First WhatsApp I sent: ${b.firstWa || ''}`;
   const sig = signals(html);
   const text = toText(html);
   
-    let productText = '';
+  let productText = '', stock = 'not checked';
   const pm = html.match(/href=["']([^"']*\/products?\/[^"'#?]+)["']/i);
   if (pm) {
     try {
@@ -250,6 +265,7 @@ First WhatsApp I sent: ${b.firstWa || ''}`;
       if (pu.hostname === target.hostname) {
         const pr = await fetch(pu, { headers: UA, signal: AbortSignal.timeout(8000) });
         if (pr.ok) productText = toText(await pr.text()).slice(0, 2500);
+        stock = await checkStock(pu);
       }
     } catch {}
   }
@@ -264,6 +280,8 @@ Evidence rules (most important):
 - "emailToolDetected: false" only means no known email tool appeared in the page code. Treat it as a soft hint, never as proof the store has no email marketing.
 - Every observation must rest on visible text or a clear signal. In the evidence field, quote or describe it in plain English. Never use field names or code terms such as signal names, JSON keys, or "false".
 - If evidence is thin, give fewer observations (minimum 2) rather than inventing.
+
+- Words such as "Sold out", "Sale", "Unavailable" or "Variant sold out" often sit in hidden template text on a page even when the item is in stock. NEVER say a product is sold out, out of stock or unavailable unless the "Stock check" line says SOLD OUT. If it says IN STOCK, or "not checked", do not mention stock at all.
 
 Relevance rules:
 - Only raise things Toheeb could actually help with given his services: email capture and flows, copywriting, product page clarity, store design, trust and conversion. Ignore the store's business model, pricing, or how its own product works.
@@ -282,7 +300,7 @@ Pitch logic (follow this for every draft):
 2. After the greeting, open with one genuine compliment on something specific (a product, collection or line of copy), then the observation. Never open with a generic compliment.
 3. Connect the observation to a benefit in plain words (more first orders, fewer abandoned carts, less confusion), not a feature.
 4. Make exactly ONE ask: either a question OR an offer of one small free thing (for example "I can sketch a 3-email welcome flow"). Never both.
-5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items mean restock or waitlist emails; an expired or broken page element means a quick fix; weak product copy means rewrite one product page.
+5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items (only when the Stock check says SOLD OUT) mean restock or waitlist emails; an expired or broken page element means a quick fix; weak product copy means rewrite one product page.
 6. A product page excerpt may be included. Comment on product descriptions only if that excerpt is there.
 7. Before answering, check the draft: is every fact visible in the evidence, is there one ask, and would a stranger understand the point in 5 seconds? Fix it if not.
 
@@ -296,7 +314,8 @@ My writing style: ${voice || 'warm, professional, respectful'}
 Homepage text (trimmed):
 ${text}
 One product page (trimmed):
-${productText || 'not available'}`;
+${productText || 'not available'}
+Stock check for that product (from the store's own data): ${stock}`;
 
   const order = (process.env.AI_PROVIDER || 'gemini').toLowerCase() === 'groq' ? ['groq', 'gemini'] : ['gemini', 'groq'];
   const keys = { gemini: process.env.GEMINI_API_KEY, groq: process.env.GROQ_API_KEY };
