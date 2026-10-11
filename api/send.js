@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to || '') || !subject || !body)
     return res.status(400).json({ error: 'Add a valid email, subject, and message.' });
 
-  const text = `${body}\n\n--\nToheeb Akanni | ATM (Akanni Toheeb Marketing)\ntoheebakanni.name.ng\nInstagram: instagram.com/real_toheeb\nNot interested? Just reply "no thanks" and I won't message you again.`;
+  const text = `${body}\n\n--\nToheeb Akanni | ATM (Akanni Toheeb Marketing)\nPortfolio: https://toheebakanni.name.ng\nNot interested? Just reply "no thanks" and I won't message you again.`;
 
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
