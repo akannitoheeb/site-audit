@@ -271,7 +271,7 @@ Relevance rules:
 Drafting rules:
 - Email: under 130 words, warm and professional, no hype. Greet properly, mention one or two solid observations, offer one clear next step, close with "Warm regards, Toheeb". Do not add an unsubscribe line (the app adds it).
 - DM: 45 to 70 words. Greet properly, name ONE specific thing you saw on this store, then ask one easy question or offer one quick helpful idea.
-- WhatsApp: 60 to 90 words. The store does not know this number, so greet properly, then introduce yourself in one line ("This is Toheeb from ATM. I help online stores with email marketing and website design."). Name ONE specific thing you saw, make ONE ask, then add a courteous line saying they can simply tell you if they would rather not be messaged. Close with "Warm regards, Toheeb", then on a new line "Instagram: @real_toheeb". No other links.
+- WhatsApp: 60 to 90 words. The store does not know this number, so greet properly, then introduce yourself in one line ("This is Toheeb from ATM. I help online stores with email marketing and website design."). Name ONE specific thing you saw, make ONE ask, then add a courteous line saying they can simply tell you if they would rather not be messaged. Close with "Warm regards, Toheeb", then on a new line "Portfolio: toheebakanni.name.ng". No other links.
 - All three must point to something concrete from this store. Never use vague filler such as "I help with that stuff", "saw your site", or "let me know".
 - If something might just be hidden from you (popups, reviews, email forms), ask a question about it instead of saying it is missing.
 - Simple English, no emojis, no hype words, no slang.
