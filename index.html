@@ -94,6 +94,7 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
       <p class="hint">Audits run one by one with a short pause. Results land in the Leads table below, and you open each to review and send. Keep this page open while it runs.</p>
       <button class="big" id="bulkGo">Audit all</button>
       <div id="bulkMsg" class="hint" role="status" style="margin-top:10px"></div>
+      <button class="ghost" id="bulkRetry" type="button" hidden style="margin-top:10px"></button>
     </div>
     <div id="err" class="err" role="alert"></div>
     <details>
@@ -194,7 +195,9 @@ function setStep(n){[...$('steps').children].forEach((li,i)=>{li.className=i<n?'
 function count(){$('bodyCount').textContent=wc($('body').value)+' words (aim for under 130)';$('dmCount').textContent=wc($('dm').value)+' words (aim for under 70)';$('waCount').textContent=wc($('waMsg').value)+' words (aim for under 90)'}
 
 async function call(path,payload){
-  const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-app-password':$('pw').value},body:JSON.stringify(payload)});
+  let r;
+  try{r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-app-password':$('pw').value},body:JSON.stringify(payload)})}
+  catch{const n=new Error('Connection dropped. Check your network and try again.');n.network=true;throw n}
   const t=await r.text();let d;
   try{d=JSON.parse(t)}catch{throw new Error('Server error '+r.status+(r.status===404?': the api folder was not found on this deployment.':': the function crashed. Check Vercel logs.'))}
   if(!r.ok)throw new Error(d.error||'Something went wrong');return d;
@@ -254,23 +257,39 @@ $('go').onclick=async()=>{
   clearInterval(timer);$('go').disabled=false;$('go').textContent='Audit this store';
 };
 
-$('bulkGo').onclick=async()=>{
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let failedUrls=[];
+async function auditOne(u){
+  try{return await runAudit(u)}catch(e){
+    if(/busy/i.test(e.message)){$('bulkMsg').textContent='AI is busy. Waiting 20 seconds, then retrying '+u+'...';await sleep(20000);return await runAudit(u)}
+    if(e.network||/could not load that store/i.test(e.message)){$('bulkMsg').textContent='Retrying '+u+'...';await sleep(3000);return await runAudit(u)}
+    throw e}
+}
+async function runBulk(urls){
+  $('err').textContent='';$('bulkRetry').hidden=true;$('bulkGo').disabled=true;
+  let ok=0,nc=0,lock=null;const fail=[],failed=[];
+  try{lock=await navigator.wakeLock.request('screen')}catch{} // keeps the phone screen on so the run is not cut off
+  for(let i=0;i<urls.length;i++){
+    $('bulkMsg').textContent='Auditing '+(i+1)+' of '+urls.length+': '+urls[i];
+    let c,err;
+    try{c=await auditOne(urls[i])}catch(e){err=e}
+    if(c){upsert(c,'New');ok++;if(!hasContact(c))nc++}
+    else{fail.push(urls[i]+' - '+(err.network?'Connection dropped':err.message));failed.push(urls[i])}
+    if(i<urls.length-1)await sleep(6000);
+  }
+  try{if(lock)await lock.release()}catch{}
+  failedUrls=failed;
+  $('bulkMsg').textContent='Done. '+ok+' audited'+(nc?' ('+nc+' with no contact details were saved under No contact)':'')+(failed.length?', '+failed.length+' failed. Tap Retry failed to try those again.':'.')+' Open the audited ones from the Leads table below.';
+  $('err').textContent=fail.join('\n');$('bulkGo').disabled=false;
+  $('bulkRetry').hidden=!failed.length;$('bulkRetry').textContent='Retry failed ('+failed.length+')';
+}
+$('bulkGo').onclick=()=>{
   $('err').textContent='';store.set('pw',$('pw').value);store.set('services',$('services').value);
   const urls=[...new Set($('bulkUrls').value.split(/\s+/).filter(Boolean))].slice(0,20);
   if(!urls.length){$('err').textContent='Paste at least one store link.';return}
-  $('bulkGo').disabled=true;let ok=0,nc=0;const fail=[];
-  for(let i=0;i<urls.length;i++){
-    $('bulkMsg').textContent='Auditing '+(i+1)+' of '+urls.length+': '+urls[i];
-    let c;
-    try{c=await runAudit(urls[i])}catch(e){
-      if(/busy/i.test(e.message)){$('bulkMsg').textContent='AI is busy. Waiting 20 seconds, then retrying '+urls[i]+'...';await new Promise(r=>setTimeout(r,20000));try{c=await runAudit(urls[i])}catch(e2){e=e2}}
-      if(!c)fail.push(urls[i]+' - '+e.message)}
-    if(c){upsert(c,'New');ok++;if(!hasContact(c))nc++}
-    if(i<urls.length-1)await new Promise(r=>setTimeout(r,6000));
-  }
-  $('bulkMsg').textContent='Done. '+ok+' audited'+(nc?' ('+nc+' with no contact details were saved under No contact)':'')+(fail.length?', '+fail.length+' failed.':'.')+' Open them from the Leads table below.';
-  $('err').textContent=fail.join('\n');$('bulkGo').disabled=false;
+  runBulk(urls);
 };
+$('bulkRetry').onclick=()=>{store.set('pw',$('pw').value);runBulk(failedUrls.slice())};
 
 const sentToday=()=>LEADS.filter(l=>l.emailed&&new Date(l.emailed).toDateString()===new Date().toDateString()).length;
 $('send').onclick=async()=>{
