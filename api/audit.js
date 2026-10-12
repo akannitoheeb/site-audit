@@ -13,7 +13,10 @@ const SOCIAL = {
   whatsapp: /https?:\/\/(?:wa\.me\/\d+|api\.whatsapp\.com\/send\?phone=\d+)/i,
 };
 
-const TONE = `Voice: write like a seasoned consultant with decades of experience in email marketing and web design: calm, mature, precise and respectful. Never mention a number of years of experience. Never be blunt, rude, sarcastic or pushy. Always begin with a proper greeting ("Good day," or "Hello team at [Store],") and close courteously ("Warm regards, Toheeb"). Frame every observation as an opportunity and respect the store's work. No slang, no "Hey", no emojis.`;
+// Words and habits that busy store owners and mailbox filters read as mass mail. The AI is told never to use them.
+const AVOID = 'free, guarantee, guaranteed, risk-free, no obligation, act now, limited time, urgent, click here, buy now, exclusive, amazing, incredible, game-changer, revolutionary, boost, skyrocket, supercharge, dominate, unlock, leverage, synergy, elevate, streamline, enhance, optimize, maximize, transform, refine, cutting-edge, state-of-the-art, best-in-class, world-class, nurture, funnel, engagement, customer journey, brand voice, increase your sales';
+
+const TONE = `Voice: write like one thoughtful professional emailing a shop owner they respect: polite, plain and human. Greet with "Hi [first name]," when a name is known, otherwise "Hello," or "Hello [Store] team,". Short sentences, everyday words, no marketing jargon. Never mention a number of years of experience. Never be blunt, rude, sarcastic or pushy. Close with "Kind regards," then "Toheeb". No slang, no emojis. Never use these words or phrases, because they read as mass mail and trigger spam filters: ${AVOID}. In emails, also no exclamation marks, no ALL CAPS words, no links, and no $ or % signs.`;
 
 // Country codes we know how to recognise, and what a store's web address tells us about its country
 const KNOWN_CC = ['234', '233', '254', '353', '44', '61', '27', '1'];
@@ -308,19 +311,20 @@ Relevance rules:
 - Only raise things Toheeb could actually help with given his services: email capture and flows, copywriting, product page clarity, store design, trust and conversion. Ignore the store's business model, pricing, or how its own product works.
 
 Drafting rules:
-- Email: under 130 words, warm and professional, no hype. Greet properly, mention one or two solid observations, offer one clear next step, close with "Warm regards, Toheeb". Do not add an unsubscribe line (the app adds it).
+- Email subject: 2 to 6 words, specific to this store, written the way a person would type it (for example "your welcome email" or "question about the Ocean Blue page"). No colons, no marketing verbs.
+- Email body: 45 to 75 words in two or three short paragraphs. Start with the one specific thing you noticed (add a compliment only if it is genuinely specific, never a generic "I admired..."). Then one plain sentence on why it matters to them, then ONE easy ask. No lists, no bold, no links. Close with "Kind regards," and "Toheeb". Write each email fresh; do not reuse the same opening or sentence shapes for every store. Do not add an unsubscribe line (the app adds it).
 - DM: 45 to 70 words. Greet properly, name ONE specific thing you saw on this store, then ask one easy question or offer one quick helpful idea.
-- WhatsApp: 60 to 90 words. The store does not know this number, so greet properly, then introduce yourself in one line ("This is Toheeb from ATM. I help online stores with email marketing and website design."). Name ONE specific thing you saw, make ONE ask, then add a courteous line saying they can simply tell you if they would rather not be messaged. Close with "Warm regards, Toheeb", then on a new line "Portfolio: toheebakanni.name.ng". No other links.
+- WhatsApp: 60 to 90 words. The store does not know this number, so greet properly, then introduce yourself in one line ("This is Toheeb from ATM. I help online stores with email marketing and website design."). Name ONE specific thing you saw, make ONE ask, then add a courteous line saying they can simply tell you if they would rather not be messaged. Close with "Kind regards, Toheeb", then on a new line "Portfolio: toheebakanni.name.ng". No other links.
 - All three must point to something concrete from this store. Never use vague filler such as "I help with that stuff", "saw your site", or "let me know".
 - If something might just be hidden from you (popups, reviews, email forms), ask a question about it instead of saying it is missing.
 - Simple English, no emojis, no hype words, no slang.
-- Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Good day, I admired the bespoke game sets on The Craft House. I noticed the homepage still shows an expired-offer banner with the timer at zero. Are you planning a new campaign soon? I would be glad to help tidy that up."
+- Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Hello, I liked the bespoke game sets on The Craft House. I noticed the homepage still shows an expired-offer banner with the timer at zero. Are you planning a new campaign soon? Happy to help tidy that up."
 
 Pitch logic (follow this for every draft):
 1. Pick the single best observation: something concrete the store could fix or gain that Toheeb's services solve.
 2. After the greeting, open with one genuine compliment on something specific (a product, collection or line of copy), then the observation. Never open with a generic compliment.
 3. Connect the observation to a benefit in plain words (more first orders, fewer abandoned carts, less confusion), not a feature.
-4. Make exactly ONE ask: either a question OR an offer of one small free thing (for example "I can sketch a 3-email welcome flow"). Never both.
+4. Make exactly ONE ask: either a question OR an offer of one small piece of work for them (for example "I can sketch a 3-email welcome flow"); never use the word "free". Never both.
 5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items (only when the Stock check says SOLD OUT) mean restock or waitlist emails; an expired or broken page element means a quick fix; weak product copy means rewrite one product page.
 6. A product page excerpt may be included. Comment on product descriptions only if that excerpt is there.
 7. Before answering, check the draft: is every fact visible in the evidence, is there one ask, and would a stranger understand the point in 5 seconds? Fix it if not.
