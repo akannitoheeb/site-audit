@@ -95,6 +95,26 @@ function toText(html) {
     .slice(0, 6000);
 }
 
+// Which address is most likely to reach a real person? Help-desk inboxes (support@, orders@) rarely pass a pitch on.
+const FREEMAIL = /^(gmail|googlemail|outlook|hotmail|live|yahoo|ymail|icloud|me|proton|protonmail|aol|gmx|zoho)\./i;
+const NEVER = /^(no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster|abuse|privacy|legal|dpo|gdpr|security|unsubscribe|bounce|webmaster)$/i;
+const HELPDESK = /^(support|help|care|customer-?care|customer-?service|service|orders?|returns?|shipping|billing|accounts?|refunds?|tickets?|helpdesk)$/i;
+const FRIENDLY = /^(hello|hi|hey|contact|team|studio|shop|store|info|mail|enquiries|enquiry|sales|office)$/i;
+
+function rankEmails(list, base) {
+  const scored = [];
+  list.forEach((e, i) => {
+    const [local0, dom] = e.split('@');
+    const local = local0.replace(/\+.*$/, '');
+    const same = dom.replace(/^www\./, '') === base;
+    if (!same && !FREEMAIL.test(dom)) return;   // other companies' addresses (platforms, agencies) are not the store
+    if (NEVER.test(local)) return;
+    const tier = HELPDESK.test(local) ? 2 : FRIENDLY.test(local) ? 1 : 0; // 0 = looks like a person or the owner
+    scored.push({ e, score: tier * 2 + (same ? 0 : 1), i });
+  });
+  return scored.sort((a, b) => a.score - b.score || a.i - b.i).map((x) => x.e);
+}
+
 function findContacts(html, host) {
   const found = new Set();
   for (const m of html.matchAll(/mailto:([^"'?\s>]+)/gi)) {
@@ -103,7 +123,8 @@ function findContacts(html, host) {
   for (const m of html.matchAll(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi)) found.add(m[0].toLowerCase());
   const list = [...found].filter((e) => !JUNK.test(e));
   const base = host.replace(/^www\./, '');
-  const out = { email: list.find((e) => e.split('@')[1] === base) || list[0] || null };
+  const emails = rankEmails(list, base).slice(0, 5);
+  const out = { email: emails[0] || null, emails };
   out.phones = findPhones(html, host);
   out.phone = out.phones[0] || null;
   for (const [k, re] of Object.entries(SOCIAL)) out[k] = (html.match(re) || [])[0] || null;
