@@ -40,6 +40,7 @@ button.ghost,.tab{background:var(--card);color:var(--ink);border-color:var(--lin
 button.big{width:100%;margin-top:18px;padding:14px;font-size:1.05rem;background:var(--big);border-color:var(--big);color:var(--bigtx)}
 header button{background:transparent;border-color:#ffffff88;color:#fff;padding:6px 14px;font-size:.85rem}
 button:disabled{opacity:.6;cursor:wait}
+#send:disabled,#copyMail:disabled,#copyDm:disabled,#openWa:disabled,#copyWa:disabled{cursor:not-allowed}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .err{color:var(--coral);font-weight:600;margin-top:10px;min-height:1.2em;white-space:pre-wrap}
 details{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
@@ -113,6 +114,8 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
       <a id="storeLink" href="#" target="_blank" rel="noopener" class="hint" style="display:inline-block;word-break:break-all"></a>
       <div class="chips" id="chips"></div>
       <ul class="obs" id="obs"></ul>
+      <label for="verified" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px;font-weight:600;cursor:pointer"><input type="checkbox" id="verified" style="width:20px;height:20px;padding:0;flex:none;margin-top:2px"><span>I opened the store and checked each point above. Everything I am about to send is true.</span></label>
+      <p class="hint" id="verifyHint" style="margin:0 0 10px">Send, Copy and Open in WhatsApp stay locked until you tick this.</p>
       <div class="actions"><button class="ghost" id="followBtn" type="button">Draft a follow-up</button><span id="followMsg" class="hint" style="align-self:center"></span></div>
     </section>
     <div class="two">
@@ -121,6 +124,8 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
         <p class="hint">A signature and opt-out line are added when sent.</p>
         <label for="email">Send to (auto-filled if the store shows an email)</label>
         <input id="email" type="email" placeholder="hello@theirstore.com">
+        <div id="mailWarn" class="hint" hidden style="margin-top:8px;color:var(--bad,#f08a7e)">This looks like a help-desk inbox. A cold pitch sent here rarely reaches the owner. Try the store's Instagram, or look for a founder or owner email.</div>
+        <div id="mailPick" hidden><p class="hint" style="margin:10px 0 6px">More than one address was found. Tap one to use it. The first is the one most likely to reach a person.</p><div class="chips" id="mailChips" style="margin:0"></div></div>
         <div class="actions" style="margin-top:8px"><button class="ghost" id="findMail" type="button">Search for their email</button></div>
         <label for="subj">Subject</label><input id="subj">
         <label for="body">Message</label><textarea id="body"></textarea>
@@ -227,7 +232,7 @@ function show(c){
     if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
   $('obs').innerHTML='';
   (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
-  $('email').value=c.to||'';$('social').value=c.profile||'';
+  $('email').value=c.to||'';mailPick(f.emails||[]);$('verified').checked=false;gate();$('social').value=c.profile||'';
   $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';
   count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
 }
@@ -243,6 +248,16 @@ function waPick(ph){const box=$('waChips');box.innerHTML='';$('waPick').hidden=p
   ph.forEach(p=>{const b=document.createElement('button');b.type='button';b.className='ghost';b.style.padding='6px 12px';b.textContent='+'+p;b.dataset.n=p;
     b.onclick=()=>{$('wa').value='+'+p;markWa();if(current){sync();upsert(current)}};box.appendChild(b)});markWa()}
 $('wa').addEventListener('input',markWa);
+const HELP_RE=/^(support|help|care|customer-?care|customer-?service|service|orders?|returns?|shipping|billing|accounts?|refunds?|tickets?|helpdesk)$/i;
+function mailNote(){const v=$('email').value.trim().toLowerCase();$('mailWarn').hidden=!(v.includes('@')&&HELP_RE.test(v.split('@')[0].replace(/\+.*$/,'')));[...$('mailChips').children].forEach(b=>b.classList.toggle('on',b.dataset.e===v))}
+function mailPick(list){const box=$('mailChips');box.innerHTML='';$('mailPick').hidden=list.length<2;
+  list.forEach(e=>{const b=document.createElement('button');b.type='button';b.className='ghost';b.style.padding='6px 12px';b.dataset.e=e;b.textContent=e+(HELP_RE.test(e.split('@')[0])?' (help desk)':'');
+    b.onclick=()=>{$('email').value=e;mailNote();if(current){sync();upsert(current)}};box.appendChild(b)});mailNote()}
+$('email').addEventListener('input',mailNote);
+// Sending actions stay locked until you confirm you checked the claims on the store
+const GATED=['send','copyMail','copyDm','openWa','copyWa'];
+function gate(){const ok=$('verified').checked;GATED.forEach(i=>{$(i).disabled=!ok});$('verifyHint').hidden=ok}
+$('verified').addEventListener('change',gate);
 function closeAudit(){if(current){sync();upsert(current)}current=null;$('result').hidden=true;$('url').value='';$('followMsg').textContent='';$('sendMsg').textContent='';setStep(0);window.scrollTo({top:0,behavior:'smooth'})}
 $('closeTop').onclick=closeAudit;$('closeBottom').onclick=closeAudit;
 
@@ -298,10 +313,10 @@ $('send').onclick=async()=>{
   if(sentToday()>=CAP){$('sendMsg').textContent='Daily limit reached. Try again tomorrow.';return}
   if(!confirm('Send this email to '+current.to+'?'))return;
   $('send').disabled=true;
-  try{await call('/api/send',{to:current.to,subject:current.email.subject,body:current.email.body});
+  try{await call('/api/send',{to:current.to,subject:current.email.subject,body:current.email.body,withLink:(current.followups||0)>0});
     setStep(4);toast('Email sent');upsert(current,'Contacted',true)}
   catch(e){$('sendMsg').textContent=e.message}
-  $('send').disabled=false;
+  gate();
 };
 $('copyMail').onclick=()=>{navigator.clipboard.writeText($('subj').value+'\n\n'+$('body').value);toast('Email copied')};
 $('copyDm').onclick=()=>{navigator.clipboard.writeText($('dm').value);toast('DM copied')};
