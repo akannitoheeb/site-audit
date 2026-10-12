@@ -130,6 +130,7 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
         <label for="subj">Subject</label><input id="subj">
         <label for="body">Message</label><textarea id="body"></textarea>
         <div class="count" id="bodyCount"></div>
+        <div class="hint" id="spamNote" style="margin-top:6px"></div>
         <div class="actions"><button id="send">Send email</button><button class="ghost" id="copyMail">Copy</button></div>
         <div id="sendMsg" role="status" class="hint" style="margin-top:8px"></div>
       </section>
@@ -197,7 +198,20 @@ $('tSingle').onclick=()=>mode(false);$('tBulk').onclick=()=>mode(true);
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
 function setStep(n){[...$('steps').children].forEach((li,i)=>{li.className=i<n?'done':i===n?'on':''})}
-function count(){$('bodyCount').textContent=wc($('body').value)+' words (aim for under 130)';$('dmCount').textContent=wc($('dm').value)+' words (aim for under 70)';$('waCount').textContent=wc($('waMsg').value)+' words (aim for under 90)'}
+const SPAM_RE=/\b(free|guarantee[ds]?|risk-?free|no obligation|act now|limited time|urgent|click here|buy now|exclusive|amazing|incredible|game-?changer|revolutionary|boost\w*|skyrocket\w*|supercharge\w*|dominat\w*|unlock\w*|leverag\w*|synerg\w*|elevat\w*|streamlin\w*|enhanc\w*|optimi[sz]\w*|maximi[sz]\w*|transform\w*|refin\w*|cutting-?edge|state-of-the-art|best-in-class|world-class|nurtur\w*|funnel\w*|engagement|customer journey|brand voice|increase your sales)\b/gi;
+function spamCheck(){
+  const subj=$('subj').value,body=$('body').value,t=subj+' '+body,notes=[];
+  const words=[...new Set((t.match(SPAM_RE)||[]).map(w=>w.toLowerCase()))];
+  if(words.length)notes.push('replace these words: '+words.join(', '));
+  if(t.includes('!'))notes.push('remove exclamation marks');
+  if(/https?:\/\/|www\./i.test(t))notes.push('remove links from a first email');
+  if(/[$€£%]/.test(t))notes.push('avoid money and percent signs');
+  if(wc(subj)>6)notes.push('shorten the subject to 6 words or fewer');
+  if(wc(body)>90)notes.push('shorten the message (under 75 words works best)');
+  const el=$('spamNote');el.textContent=notes.length?'Spam check: '+notes.join('; ')+'.':'Spam check: nothing risky found.';
+  el.style.color=notes.length?'#f08a7e':'#7fd8a6';
+}
+function count(){spamCheck();$('bodyCount').textContent=wc($('body').value)+' words (aim for under 75)';$('dmCount').textContent=wc($('dm').value)+' words (aim for under 70)';$('waCount').textContent=wc($('waMsg').value)+' words (aim for under 90)'}
 
 async function call(path,payload){
   let r;
@@ -242,7 +256,7 @@ function sync(){
   current.phone=$('wa').value.trim();current.whatsapp=$('waMsg').value;
 }
 ['email','social','subj','body','dm','wa','waMsg'].forEach(i=>$(i).addEventListener('change',()=>{if(current){sync();upsert(current)}}));
-['body','dm','waMsg'].forEach(i=>$(i).addEventListener('input',count));
+['subj','body','dm','waMsg'].forEach(i=>$(i).addEventListener('input',count));
 function markWa(){const v=$('wa').value.replace(/\D/g,'');[...$('waChips').children].forEach(b=>b.classList.toggle('on',b.dataset.n===v))}
 function waPick(ph){const box=$('waChips');box.innerHTML='';$('waPick').hidden=ph.length<2;
   ph.forEach(p=>{const b=document.createElement('button');b.type='button';b.className='ghost';b.style.padding='6px 12px';b.textContent='+'+p;b.dataset.n=p;
