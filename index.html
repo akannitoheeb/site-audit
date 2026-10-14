@@ -433,6 +433,16 @@ function renderNC(ncs){
 function openFromUrl(){const u=new URLSearchParams(location.search).get('open');if(!u)return;const l=LEADS.find(x=>x.url===u);if(l&&l.data){history.replaceState(null,'',location.pathname);show(l.data)}}
 LEADS=store.get('leads',[]);render();openFromUrl();loadLeads();
 $('pw').addEventListener('change',()=>{store.set('pw',$('pw').value);loadLeads()});
+function prefillFromUrl(){
+  const u=new URLSearchParams(location.search).get('url');
+  if(!u)return;
+  $('url').value=norm(u.trim());
+  history.replaceState(null,'',location.pathname);
+  mode(false);
+  toast('Store filled in. Tap "Audit this store".');
+  $('go').scrollIntoView({behavior:'smooth',block:'center'});
+}
+prefillFromUrl();
 </script>
 </body>
 </html>
