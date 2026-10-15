@@ -114,9 +114,10 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
       <a id="storeLink" href="#" target="_blank" rel="noopener" class="hint" style="display:inline-block;word-break:break-all"></a>
       <div class="chips" id="chips"></div>
       <ul class="obs" id="obs"></ul>
+      <details id="prevObs" hidden><summary>Points from the previous audit</summary><ul class="obs" id="prevList" style="margin-top:10px"></ul></details>
       <label for="verified" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px;font-weight:600;cursor:pointer"><input type="checkbox" id="verified" style="width:20px;height:20px;padding:0;flex:none;margin-top:2px"><span>I opened the store and checked each point above. Everything I am about to send is true.</span></label>
       <p class="hint" id="verifyHint" style="margin:0 0 10px">Send, Copy and Open in WhatsApp stay locked until you tick this.</p>
-      <div class="actions"><button class="ghost" id="followBtn" type="button">Draft a follow-up</button><span id="followMsg" class="hint" style="align-self:center"></span></div>
+      <div class="actions"><button class="ghost" id="reauditBtn" type="button">Re-audit store</button><button class="ghost" id="followBtn" type="button">Draft a follow-up</button><span id="followMsg" class="hint" style="align-self:center"></span></div>
     </section>
     <div class="two">
       <section class="card">
@@ -246,6 +247,8 @@ function show(c){
     if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
   $('obs').innerHTML='';
   (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
+  $('prevList').innerHTML='';const pv=c.prevObservations||[];$('prevObs').hidden=!pv.length;
+  pv.forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('prevList').appendChild(li)});
   $('email').value=c.to||'';mailPick(f.emails||[]);$('verified').checked=false;gate();$('social').value=c.profile||'';
   $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';
   count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
@@ -360,6 +363,23 @@ $('followBtn').onclick=async()=>{
     $('followMsg').textContent='Follow-up '+(n+1)+' is ready. Review it, then send or copy.';
   }catch(e){$('followMsg').textContent=e.message}
   $('followBtn').disabled=false;
+};
+$('reauditBtn').onclick=async()=>{
+  if(!current)return;
+  sync();const old=current;
+  $('reauditBtn').disabled=true;$('followMsg').textContent='Re-auditing...';
+  try{
+    const c=await runAudit(old.url);
+    const m={...c,
+      first:old.first||{email:old.email,dm:old.dm,whatsapp:old.whatsapp},
+      followups:old.followups||0,
+      email:old.email,dm:old.dm,whatsapp:old.whatsapp,
+      to:old.to||c.to,phone:old.phone||c.phone,profile:old.profile||c.profile,
+      prevObservations:old.observations||[]};
+    upsert(m);show(m);
+    $('followMsg').textContent='Fresh audit loaded. Check the new points on the store, then tap Draft a follow-up.';
+  }catch(e){$('followMsg').textContent=e.message}
+  $('reauditBtn').disabled=false;
 };
 function upsert(c,status,emailed){
   const i=LEADS.findIndex(l=>l.url===c.url);let l;const was=i>=0&&noContact(LEADS[i]);
