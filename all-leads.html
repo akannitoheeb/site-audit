@@ -38,7 +38,7 @@ td.acts{white-space:nowrap}td.acts button{margin-right:6px;padding:6px 12px}
 <main><section class="card">
   <div class="bar">
     <input id="q" type="search" placeholder="Search store name or link" aria-label="Search">
-    <select id="st" aria-label="Status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Replied</option><option>Won</option><option>Dropped</option><option value="__nc">No contact found</option></select>
+    <select id="st" aria-label="Status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Replied</option><option>Won</option><option>Dropped</option><option value="__due">Follow-ups due</option><option value="__today">Emailed today</option><option value="__nc">No contact found</option></select>
     <select id="size" aria-label="Per page"><option value="50">50 per page</option><option value="100">100 per page</option><option value="200">200 per page</option><option value="500">500 per page</option></select>
   </div>
   <p id="msg" class="hint"></p>
@@ -67,8 +67,17 @@ async function call(payload){
 }
 function save(l){store.set('leads',LEADS);call({op:'save',lead:l}).catch(()=>toast('Could not sync. Saved on this device.'))}
 function filtered(){
-  const q=$('q').value.trim().toLowerCase(),st=$('st').value;
-  return LEADS.filter(l=>(st==='__nc'?noContact(l):(!noContact(l)&&(!st||l.status===st)))&&(!q||(l.name||'').toLowerCase().includes(q)||l.url.toLowerCase().includes(q)));
+  const q=$('q').value.trim().toLowerCase(),st=$('st').value,now=Date.now();
+  const out=LEADS.filter(l=>{
+    if(q&&!((l.name||'').toLowerCase().includes(q)||l.url.toLowerCase().includes(q)))return false;
+    if(st==='__nc')return noContact(l);
+    if(noContact(l))return false;
+    if(st==='__due')return l.status==='Contacted'&&l.follow&&l.follow<=now;
+    if(st==='__today')return !!l.emailed&&new Date(l.emailed).toDateString()===new Date().toDateString();
+    return !st||l.status===st;
+  });
+  if(st==='__due')out.sort((x,y)=>x.follow-y.follow);
+  return out;
 }
 function render(){
   const F=filtered(),size=+$('size').value,pages=Math.max(1,Math.ceil(F.length/size));
@@ -95,6 +104,7 @@ function render(){
 }
 ['q','st','size'].forEach(i=>$(i).addEventListener('input',()=>{page=0;render()}));
 $('prev').onclick=()=>{page--;render()};$('next').onclick=()=>{page++;render()};
+{const f=new URLSearchParams(location.search).get('f');if(f)$('st').value=({due:'__due',today:'__today'})[f]||f}
 render();
 if(!store.get('pw','')){$('msg').textContent='Open the main page and enter your password under My settings first.'}
 else call({op:'list'}).then(d=>{LEADS=d.leads;store.set('leads',LEADS);render()}).catch(()=>toast('Could not sync. Showing this device\'s copy.'));
