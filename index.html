@@ -18,7 +18,7 @@ header p{margin:0;max-width:520px;color:#dfe3ff}
 header mark{background:var(--sun);color:#101428;padding:.02em .3em .1em;border-radius:4px;display:inline-block;line-height:1.1;margin-top:.2em}
 main{max-width:980px;margin:-56px auto 64px;padding:0 16px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-.stat{background:var(--card);border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+.stat{display:block;color:inherit;text-decoration:none;cursor:pointer;background:var(--card);border-radius:12px;padding:14px 16px;box-shadow:0 8px 24px rgba(0,0,0,.14)}
 .stat b{display:block;font-size:1.8rem;line-height:1.1}
 .stat span{color:var(--mute);font-size:.85rem}
 .stat.due b{color:var(--coral)}
@@ -75,10 +75,10 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
 
 <main>
   <div class="stats">
-    <div class="stat"><b id="sTotal">0</b><span>Stores audited</span></div>
-    <div class="stat"><b id="sContacted">0</b><span>Contacted</span></div>
-    <div class="stat"><b id="sSent">0/100</b><span>Emails sent today</span></div>
-    <div class="stat due"><b id="sDue">0</b><span>Follow-ups due</span></div>
+    <a class="stat" href="all-leads.html"><b id="sTotal">0</b><span>Stores audited</span></a>
+    <a class="stat" href="all-leads.html?f=Contacted"><b id="sContacted">0</b><span>Contacted</span></a>
+    <a class="stat" href="all-leads.html?f=today"><b id="sSent">0/100</b><span>Emails sent today</span></a>
+    <a class="stat due" href="all-leads.html?f=due"><b id="sDue">0</b><span>Follow-ups due</span></a>
   </div>
   <ol class="steps" id="steps"><li class="on">1 Add store</li><li>2 Audit</li><li>3 Review drafts</li><li>4 Send</li></ol>
 
@@ -432,6 +432,7 @@ function renderNC(ncs){
 }
 function openFromUrl(){const u=new URLSearchParams(location.search).get('open');if(!u)return;const l=LEADS.find(x=>x.url===u);if(l&&l.data){history.replaceState(null,'',location.pathname);show(l.data)}}
 LEADS=store.get('leads',[]);render();openFromUrl();loadLeads();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadLeads()});
 $('pw').addEventListener('change',()=>{store.set('pw',$('pw').value);loadLeads()});
 function prefillFromUrl(){
   const u=new URLSearchParams(location.search).get('url');
