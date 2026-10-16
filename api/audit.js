@@ -84,12 +84,16 @@ function signals(html) {
     mobileViewportTag: /name=["']viewport["']/i.test(html),
     emailToolDetected: has('klaviyo', 'mailchimp', 'omnisend', 'mailerlite', 'sendinblue', 'brevo', 'convertkit'),
     newsletterOrSubscribeText: has('newsletter', 'subscribe', 'join our list'),
+    emailSignupFormDetected: /<input[^>]+type=["']email["']/i.test(html) || has('contact[email]', 'klaviyo-form', 'needsclick', 'mc-embedded-subscribe'),
     pageSizeKB: Math.round(html.length / 1024),
   };
 }
 
 function toText(html) {
   return html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(template|noscript|svg)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<(\w+)\b[^>]*(?:\shidden(?=[\s>=])|aria-hidden=["']true["']|display:\s*none)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
@@ -305,6 +309,8 @@ Evidence rules (most important):
 - Every observation must rest on visible text or a clear signal. In the evidence field, quote or describe it in plain English. Never use field names or code terms such as signal names, JSON keys, or "false".
 - If evidence is thin, give fewer observations (minimum 2) rather than inventing.
 
+- NEVER mention announcement bars, top banners, tickers or placeholder or default theme text (for example "Welcome to our store", "Lorem ipsum", "Your text here"). Themes keep this text in the page code even when visitors never see it, so you cannot tell what is really shown.
+- "emailSignupFormDetected: true" means an email field exists in the homepage code. Then NEVER say the store has no signup form, newsletter form or email capture. You may only suggest improving what they offer in return for the email. If it is false, you still cannot be sure (popups load later), so ask a question instead of stating it is missing.
 - Words such as "Sold out", "Sale", "Unavailable" or "Variant sold out" often sit in hidden template text on a page even when the item is in stock. NEVER say a product is sold out, out of stock or unavailable unless the "Stock check" line says SOLD OUT. If it says IN STOCK, or "not checked", do not mention stock at all.
 
 Relevance rules:
@@ -318,14 +324,14 @@ Drafting rules:
 - All three must point to something concrete from this store. Never use vague filler such as "I help with that stuff", "saw your site", or "let me know".
 - If something might just be hidden from you (popups, reviews, email forms), ask a question about it instead of saying it is missing.
 - Simple English, no emojis, no hype words, no slang.
-- Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Hello, I liked the bespoke game sets on The Craft House. I noticed the homepage still shows an expired-offer banner with the timer at zero. Are you planning a new campaign soon? Happy to help tidy that up."
+- Style example for a DM (match this quality; it is from a different store, so never reuse its details): "Hello, I liked the bespoke game sets on The Craft House. The product pages list sizes and materials but never say who each set is for. Are you planning to refresh them soon? Happy to sketch a clearer version of one."
 
 Pitch logic (follow this for every draft):
 1. Pick the single best observation: something concrete the store could fix or gain that Toheeb's services solve.
 2. After the greeting, open with one genuine compliment on something specific (a product, collection or line of copy), then the observation. Never open with a generic compliment.
 3. Connect the observation to a benefit in plain words (more first orders, fewer abandoned carts, less confusion), not a feature.
 4. Make exactly ONE ask: either a question OR an offer of one small piece of work for them (for example "I can sketch a 3-email welcome flow"); never use the word "free". Never both.
-5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items (only when the Stock check says SOLD OUT) mean restock or waitlist emails; an expired or broken page element means a quick fix; weak product copy means rewrite one product page.
+5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items (only when the Stock check says SOLD OUT) mean restock or waitlist emails; confusing or thin copy on a page means a quick rewrite of that page; weak product copy means rewrite one product page.
 6. A product page excerpt may be included. Comment on product descriptions only if that excerpt is there.
 7. Before answering, check the draft: is every fact visible in the evidence, is there one ask, and would a stranger understand the point in 5 seconds? Fix it if not.
 
