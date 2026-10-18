@@ -148,7 +148,28 @@ async function postRetry(url, opts, tries = 2) {
   return r;
 }
 
-const friendly = (s, m) => ([429, 503].includes(s) ? 'The AI service is busy right now. Wait a minute and try again.' : m || 'AI request failed');
+const friendly = (s, m) => {
+  const t = String(m || '');
+  if ([429, 503].includes(s)) return 'The AI service is busy or today\'s free limit is used up. Wait a minute and try again, or try later.';
+  if (s === 401 || s === 403 || /api key|permission denied|unauthori[sz]ed/i.test(t)) return 'The AI key was rejected. Check GEMINI_API_KEY or GROQ_API_KEY in Vercel.';
+  if (s === 404 || /decommission|no longer supported|does not exist|not found/i.test(t)) return 'That AI model is not available any more. Update AI_MODEL (Gemini) or GROQ_MODEL (Groq) in Vercel.';
+  return t || 'AI request failed';
+};
+
+// Keeps only the points whose quote really appears in the page text we gave the AI.
+const normQ = (x) => String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+function verifyObs(list, corpus) {
+  const hay = ' ' + normQ(corpus) + ' ';
+  const kept = []; let dropped = 0;
+  for (const o of Array.isArray(list) ? list : []) {
+    if (!o || !o.issue) continue;
+    const q = normQ(o.quote);
+    if (!q) { kept.push({ issue: o.issue, evidence: o.evidence || '', check: 'unchecked' }); continue; }
+    if (hay.includes(' ' + q + ' ')) kept.push({ issue: o.issue, evidence: o.evidence || '', quote: o.quote, check: 'quote' });
+    else dropped++;
+  }
+  return { kept, dropped };
+}
 
 async function askGemini(system, user, key) {
   try {
@@ -203,17 +224,27 @@ async function askAI(system, user) {
 
 // Shopify publishes real stock data for every product at <product link>.js.
 // Page text cannot be trusted for this: themes keep hidden "Sold out" labels in the page even when an item is in stock.
-async function checkStock(pu) {
+async function checkProduct(pu) {
+  const none = { stock: 'not checked', facts: null };
   try {
     const r = await fetch(new URL(pu.pathname.replace(/\/$/, '') + '.js', pu.origin), { headers: UA, signal: AbortSignal.timeout(6000) });
-    if (!r.ok) return 'not checked';
+    if (!r.ok) return none;
     const p = await r.json();
     const vs = Array.isArray(p.variants) ? p.variants : [];
-    if (!vs.length && typeof p.available !== 'boolean') return 'not checked';
+    if (!vs.length && typeof p.available !== 'boolean') return none;
     const n = vs.filter((v) => v.available).length;
-    if (!p.available) return 'SOLD OUT (no variant is available)';
-    return n === vs.length ? 'IN STOCK (all variants available)' : `IN STOCK (${n} of ${vs.length} variants available)`;
-  } catch { return 'not checked'; }
+    const stock = !p.available ? 'SOLD OUT (no variant is available)' : n === vs.length ? 'IN STOCK (all variants available)' : `IN STOCK (${n} of ${vs.length} variants available)`;
+    const html = String(p.description || '');
+    const words = html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
+    const bullets = (html.match(/<li\b/gi) || []).length, paras = (html.match(/<p\b/gi) || []).length;
+    const breaks = (html.match(/<br\b/gi) || []).length, heads = (html.match(/<h[1-6]\b/gi) || []).length;
+    const facts = {
+      productTitle: p.title || '', descriptionWords: words, bulletItems: bullets, paragraphs: paras, lineBreaks: breaks, headings: heads,
+      oneBlock: words >= 70 && bullets === 0 && paras <= 1 && breaks === 0 && heads === 0,
+      images: (p.images || []).length, variants: vs.length, onSale: Number(p.compare_at_price) > Number(p.price),
+    };
+    return { stock, facts };
+  } catch { return none; }
 }
 
 export default async function handler(req, res) {
@@ -222,6 +253,30 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Wrong password' });
     
 
+  if (req.body?.mode === 'reply') {
+    const b = req.body;
+    const sys = `You write a reply for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM).
+${TONE}
+A store owner answered his outreach. Write Toheeb's answer to what they actually wrote.
+Rules:
+- 40 to 90 words. Plain, warm, human. Greet by name only if the reply gives one.
+- If they are interested: thank them, say what you will send, and make ONE easy next step.
+- If they ask a question: answer briefly using only the facts given. NEVER invent prices, timelines, results, past clients or promises. If you do not know, say you will confirm and ask ONE question.
+- If they decline or ask you to stop: thank them politely, confirm you will not message again, and do not pitch.
+- If it is unclear: ask ONE short question.
+- Claims about their store only from the observations given.
+Return ONLY JSON: {"intent":"interested"|"question"|"declined"|"unclear","subject":string,"body":string}`;
+    const usr = `Store: ${b.name} (${b.url})
+My services: ${b.services || 'Email marketing strategy and WordPress web design'}
+Observations: ${JSON.stringify(b.observations || [])}
+My first email: ${b.firstEmail?.body || ''}
+Their reply:
+${String(b.theirReply || '').slice(0, 2000)}`;
+    const out = await askAI(sys, usr);
+    if (!out.ok) return res.status(502).json({ error: out.error });
+    return res.status(200).json({ provider: out.provider, ...out.json });
+  }
+
   if (req.body?.mode === 'followup') {
     const b = req.body;
     const n = b.count || 0;
@@ -229,9 +284,11 @@ export default async function handler(req, res) {
 ${TONE}
 He already sent the first message below to this store and got no reply. Write follow-up number ${n + 1}.
 Rules:
+- If an observation is about a signup form or email capture, keep it as a question ("did I miss one?") and never state that the store has none.
 - Do not repeat the first pitch. Refer to it lightly (for example "my note last week").
 - Add ONE new bit of value: a quick tip or micro-idea tied to the same observation. Use only facts from the observations given; never add new claims about the store.
 - Make exactly ONE easy ask, and give an easy out ("no worries if it's not a priority").
+- If a speed test result is given and its score is below 60, you may use it as the ONE new bit of value, stated plainly and kindly (for example "your page took about 5 seconds to show its main content on a phone"). Otherwise ignore it.
 - Never guilt-trip. Never use "just checking in" or "bumping this".
 - Email: under 70 words. DM: under 45 words. WhatsApp: under 60 words. Simple English, no emojis.
 - ${n >= 1 ? 'This is the last follow-up: close politely and leave the door open.' : 'This is the first follow-up.'}
@@ -242,7 +299,8 @@ My services: ${b.services || 'Email marketing strategy and WordPress web design'
 Observations: ${JSON.stringify(b.observations || [])}
 First email I sent: ${b.firstEmail?.body || ''}
 First DM I sent: ${b.firstDm || ''}
-First WhatsApp I sent: ${b.firstWa || ''}`;
+First WhatsApp I sent: ${b.firstWa || ''}
+Speed test (Google PageSpeed, mobile): ${b.speed ? `score ${b.speed.score} of 100, main content shows in ${b.speed.lcp}` : 'not run'}`;
     const out = await askAI(sys, usr);
     if (!out.ok) return res.status(502).json({ error: out.error });
     return res.status(200).json({ provider: out.provider, ...out.json });
@@ -285,7 +343,7 @@ First WhatsApp I sent: ${b.firstWa || ''}`;
   const sig = signals(html);
   const text = toText(html);
   
-  let productText = '', stock = 'not checked';
+  let productText = '', stock = 'not checked', facts = null;
   const pm = html.match(/href=["']([^"']*\/products?\/[^"'#?]+)["']/i);
   if (pm) {
     try {
@@ -293,7 +351,7 @@ First WhatsApp I sent: ${b.firstWa || ''}`;
       if (pu.hostname === target.hostname) {
         const pr = await fetch(pu, { headers: UA, signal: AbortSignal.timeout(8000) });
         if (pr.ok) productText = toText(await pr.text()).slice(0, 2500);
-        stock = await checkStock(pu);
+        const prod = await checkProduct(pu); stock = prod.stock; facts = prod.facts;
       }
     } catch {}
   }
@@ -309,9 +367,13 @@ Evidence rules (most important):
 - Every observation must rest on visible text or a clear signal. In the evidence field, quote or describe it in plain English. Never use field names or code terms such as signal names, JSON keys, or "false".
 - If evidence is thin, give fewer observations (minimum 2) rather than inventing.
 
+- You only see flattened text: paragraph breaks, bullets, headings, fonts, colours, spacing, images, layout and how a page looks or reads on mobile are lost. NEVER make claims about the homepage's formatting, layout, design, visual appearance or readability. The only exception is the product description, and only through the "Product facts" line, which comes from the store's own data: say the description is one block of text only if oneBlock is true; mention missing bullet points only if bulletItems is 0 and oneBlock is true; image and variant counts are allowed. If Product facts say not available, make no formatting claims at all.
 - NEVER mention announcement bars, top banners, tickers or placeholder or default theme text (for example "Welcome to our store", "Lorem ipsum", "Your text here"). Themes keep this text in the page code even when visitors never see it, so you cannot tell what is really shown.
-- "emailSignupFormDetected: true" means an email field exists in the homepage code. Then NEVER say the store has no signup form, newsletter form or email capture. You may only suggest improving what they offer in return for the email. If it is false, you still cannot be sure (popups load later), so ask a question instead of stating it is missing.
+- "emailSignupFormDetected: true" means an email field exists in the homepage code. Then NEVER say the store has no signup form, newsletter form or email capture. You may only suggest improving what they offer in return for the email. If it is false, you still cannot be sure (popups and embedded forms load later), so NEVER state that the store has no signup or email capture. Write the observation as what you could not find, for example issue "Could not find a way to join the email list on the homepage" with evidence "No signup form appears in the page code, though a popup may load later." In every draft, turn it into a question such as "I could not find a way to join your email list on the homepage. Did I miss one?" and then make the one offer (for example sketching a short welcome email).
 - Words such as "Sold out", "Sale", "Unavailable" or "Variant sold out" often sit in hidden template text on a page even when the item is in stock. NEVER say a product is sold out, out of stock or unavailable unless the "Stock check" line says SOLD OUT. If it says IN STOCK, or "not checked", do not mention stock at all.
+
+- Quotes: for every observation about something the page says or shows, put 3 to 12 consecutive words copied EXACTLY from the homepage text or the product page text into "quote". For an observation about something missing or not found, or one based on Product facts, set "quote" to an empty string. Never invent, translate or reword a quote.
+- angle: the single main angle of your pitch, exactly one of: email-capture, welcome-flow, product-copy, trust, store-design, stock, other.
 
 Relevance rules:
 - Only raise things Toheeb could actually help with given his services: email capture and flows, copywriting, product page clarity, store design, trust and conversion. Ignore the store's business model, pricing, or how its own product works.
@@ -331,11 +393,11 @@ Pitch logic (follow this for every draft):
 2. After the greeting, open with one genuine compliment on something specific (a product, collection or line of copy), then the observation. Never open with a generic compliment.
 3. Connect the observation to a benefit in plain words (more first orders, fewer abandoned carts, less confusion), not a feature.
 4. Make exactly ONE ask: either a question OR an offer of one small piece of work for them (for example "I can sketch a 3-email welcome flow"); never use the word "free". Never both.
-5. Match the offer to the observation: no sign of a welcome email means sketch a welcome flow; sold-out items (only when the Stock check says SOLD OUT) mean restock or waitlist emails; confusing or thin copy on a page means a quick rewrite of that page; weak product copy means rewrite one product page.
+5. Match the offer to the observation: no signup form found (only ever phrased as a question, never as a fact) means offer to sketch a welcome email; sold-out items (only when the Stock check says SOLD OUT) mean restock or waitlist emails; confusing or thin copy on a page means a quick rewrite of that page; weak product copy means rewrite one product page.
 6. A product page excerpt may be included. Comment on product descriptions only if that excerpt is there.
 7. Before answering, check the draft: is every fact visible in the evidence, is there one ask, and would a stranger understand the point in 5 seconds? Fix it if not.
 
-Return ONLY JSON in exactly this shape: {"storeName":string,"observations":[{"issue":string,"evidence":string}],"email":{"subject":string,"body":string},"dm":string,"whatsapp":string}`;
+Return ONLY JSON in exactly this shape: {"storeName":string,"angle":string,"observations":[{"issue":string,"evidence":string,"quote":string}],"email":{"subject":string,"body":string},"dm":string,"whatsapp":string}`;
 
   const user = `Store URL: ${target.href}
 Platform detected: ${platform}
@@ -346,20 +408,37 @@ Homepage text (trimmed):
 ${text}
 One product page (trimmed):
 ${productText || 'not available'}
-Stock check for that product (from the store's own data): ${stock}`;
+Stock check for that product (from the store's own data): ${stock}
+Product facts (from the store's own data): ${facts ? JSON.stringify(facts) : 'not available'}`;
 
   const order = (process.env.AI_PROVIDER || 'gemini').toLowerCase() === 'groq' ? ['groq', 'gemini'] : ['gemini', 'groq'];
   const keys = { gemini: process.env.GEMINI_API_KEY, groq: process.env.GROQ_API_KEY };
-  let firstError = '';
-  for (const p of order) {
-    if (!keys[p]) continue;
-    const out = await (p === 'gemini' ? askGemini : askGroq)(system, user, keys[p]);
-    if (out.ok) {
-      try {
-        const json = JSON.parse(out.text.slice(out.text.indexOf('{'), out.text.lastIndexOf('}') + 1));
-        return res.status(200).json({ platform, signals: sig, found, provider: p, ...json });
-      } catch { firstError = firstError || 'The AI reply could not be read. Try again.'; }
-    } else firstError = firstError || out.error;
+  async function generate(extra) {
+    let err = '';
+    for (const p of order) {
+      if (!keys[p]) continue;
+      const out = await (p === 'gemini' ? askGemini : askGroq)(system, user + extra, keys[p]);
+      if (out.ok) {
+        try { return { ok: true, provider: p, json: JSON.parse(out.text.slice(out.text.indexOf('{'), out.text.lastIndexOf('}') + 1)) }; }
+        catch { err = err || 'The AI reply could not be read. Try again.'; }
+      } else err = err || out.error;
+    }
+    return { ok: false, error: err || 'No AI key is set. Add GEMINI_API_KEY or GROQ_API_KEY in Vercel.' };
   }
-  return res.status(502).json({ error: firstError || 'No AI key is set. Add GEMINI_API_KEY or GROQ_API_KEY in Vercel.' });
+
+  let gen = await generate('');
+  if (!gen.ok) return res.status(502).json({ error: gen.error });
+  const corpus = text + ' ' + productText;
+  let v = verifyObs(gen.json.observations, corpus), redrafted = false;
+  const removed = v.dropped;
+  if (removed > 0 && v.kept.length) {
+    // Some points could not be matched to the page. Rewrite the drafts using only the points that could.
+    const again = await generate(`\n\nIMPORTANT: ${removed} earlier point(s) were removed because their quotes were not found on the page. Write ALL drafts using ONLY these verified points and mention nothing else about the store:\n${JSON.stringify(v.kept.map((k) => ({ issue: k.issue, evidence: k.evidence })))}`);
+    if (again.ok) {
+      const v2 = verifyObs(again.json.observations, corpus);
+      if (v2.kept.length) { gen = again; v = v2; redrafted = true; }
+    }
+  }
+  const observations = v.kept.length ? v.kept : (gen.json.observations || []).map((o) => ({ issue: o.issue, evidence: o.evidence || '', check: 'unchecked' }));
+  return res.status(200).json({ platform, signals: sig, found, provider: gen.provider, ...gen.json, observations, productFacts: facts, verification: { removed, redrafted } });
 }
