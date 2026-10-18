@@ -64,6 +64,14 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
 button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
 .nc{padding:12px 0;border-bottom:1px solid var(--line)}.nc:last-child{border-bottom:0}.nc b{display:block;word-break:break-word}
 [hidden]{display:none!important}
+.sc{display:inline-block;padding:2px 9px;border-radius:99px;font-size:.78rem;font-weight:800;white-space:nowrap}
+.sc.hot{background:var(--okbg);color:var(--oktx)}.sc.warm{background:#fff0c9;color:#7a5200}.sc.cold{background:var(--chip);color:var(--mute)}
+:root[data-theme=dark] .sc.warm{background:#4a3b10;color:#ffd98a}
+.vf{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:99px;margin-left:8px;vertical-align:middle}
+.vf.ok{background:var(--okbg);color:var(--oktx)}.vf.neu{background:var(--chip);color:var(--mute)}
+.speed{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.speed img{max-width:150px;border-radius:8px;border:1px solid var(--line)}
+tr.grp td{font-weight:800;background:var(--chip)}
 </style>
 </head>
 <body>
@@ -117,7 +125,16 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
       <details id="prevObs" hidden><summary>Points from the previous audit</summary><ul class="obs" id="prevList" style="margin-top:10px"></ul></details>
       <label for="verified" style="display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px;font-weight:600;cursor:pointer"><input type="checkbox" id="verified" style="width:20px;height:20px;padding:0;flex:none;margin-top:2px"><span>I opened the store and checked each point above. Everything I am about to send is true.</span></label>
       <p class="hint" id="verifyHint" style="margin:0 0 10px">Send, Copy and Open in WhatsApp stay locked until you tick this.</p>
-      <div class="actions"><button class="ghost" id="reauditBtn" type="button">Re-audit store</button><button class="ghost" id="followBtn" type="button">Draft a follow-up</button><span id="followMsg" class="hint" style="align-self:center"></span></div>
+      <div class="actions"><button class="ghost" id="reauditBtn" type="button">Re-audit store</button><button class="ghost" id="speedBtn" type="button">Speed test</button><button class="ghost" id="followBtn" type="button">Draft a follow-up</button><span id="followMsg" class="hint" style="align-self:center"></span></div>
+      <div id="speedBox" class="speed" hidden></div>
+      <label for="notes">My notes on this lead</label>
+      <textarea id="notes" style="min-height:70px" placeholder="Anything worth remembering: who you spoke to, what they said, the next step"></textarea>
+      <details id="replyBox"><summary>They replied? Draft my answer</summary>
+        <label for="theirReply">Paste what they wrote</label>
+        <textarea id="theirReply" style="min-height:90px"></textarea>
+        <div class="actions"><button class="ghost" id="replyBtn" type="button">Draft my reply</button><span id="replyMsg" class="hint" style="align-self:center"></span></div>
+      </details>
+      <div class="actions"><button class="ghost" id="dncBtn" type="button">Do not contact this lead</button></div>
     </section>
     <div class="two">
       <section class="card">
@@ -164,9 +181,17 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
   <section class="card">
     <h2>Leads</h2>
     <p class="hint">Every audit is saved here with its drafts and syncs across your devices. Contacted leads get a follow-up date 4 days out; overdue ones turn red.</p>
-    <div class="scroll"><table><thead><tr><th>Store</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div class="scroll"><table><thead><tr><th>Store</th><th>Score</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <p id="empty" class="hint">No leads yet.</p>
     <a id="more" class="chip neu" href="all-leads.html" hidden style="display:inline-block;margin-top:12px"></a>
+  </section>
+
+  <section class="card" id="resCard" hidden>
+    <h2>Results</h2>
+    <p class="hint">What is getting replies, based on the leads you have contacted.</p>
+    <div class="chips" id="resSum"></div>
+    <div class="scroll"><table><thead><tr><th>Group</th><th>Contacted</th><th>Replied</th><th>Won</th><th>Reply rate</th></tr></thead><tbody id="resRows"></tbody></table></div>
+    <p class="hint" id="resNote" style="margin-top:10px"></p>
   </section>
 
   <section class="card" id="ncCard" hidden>
@@ -175,6 +200,7 @@ button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
     <div id="ncList"></div>
     <button class="ghost" id="ncMore" type="button" hidden style="margin-top:12px"></button>
   </section>
+<section class="card"><details id="blkBox" style="margin:0;border:0;padding:0"><summary>Blocked addresses (bounced, spam complaint, or asked to stop)</summary><p class="hint" style="margin-top:10px">Emails to these addresses are refused. Unblock one if it was a mistake.</p><div id="blkList"></div></details></section>
 </main>
 <div class="toast" id="toast" role="status"></div>
 
@@ -220,7 +246,7 @@ async function call(path,payload){
   catch{const n=new Error('Connection dropped. Check your network and try again.');n.network=true;throw n}
   const t=await r.text();let d;
   try{d=JSON.parse(t)}catch{throw new Error('Server error '+r.status+(r.status===404?': the api folder was not found on this deployment.':': the function crashed. Check Vercel logs.'))}
-  if(!r.ok)throw new Error(d.error||'Something went wrong');return d;
+  if(r.status===401)throw new Error('Wrong password. Update it under My settings.');if(!r.ok)throw new Error(d.error||'Something went wrong');return d;
 }
 async function runAudit(url){
   url=norm(url.trim());
@@ -241,24 +267,26 @@ function show(c){
   chip(s.mobileViewportTag?'Mobile ready':'No mobile tag',s.mobileViewportTag?'ok':'bad');
   chip((s.pageSizeKB||0)+' KB homepage','neu');
   if(c.provider)chip('Written by '+(c.provider==='groq'?'Groq (backup)':'Gemini'),'neu');
+  if(c.verification&&c.verification.removed)chip(c.verification.removed+' unverified point'+(c.verification.removed>1?'s':'')+' removed','neu');
+  if(c.speed)chip('Mobile speed '+c.speed.score+'/100',c.speed.score>=70?'ok':c.speed.score>=50?'neu':'bad');
   chip(f.email?'Email found':'No email on the site',f.email?'ok':'bad');
   chip(f.phone?((f.phones||[]).length>1?(f.phones.length+' phone numbers found'):'Phone found'):'No phone on the site',f.phone?'ok':'bad');
   [['instagram','Instagram'],['facebook','Facebook'],['linkedin','LinkedIn'],['tiktok','TikTok'],['x','X'],['whatsapp','WhatsApp']].forEach(([k,n])=>{
     if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
   $('obs').innerHTML='';
-  (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
+  (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;if(o.check==='quote'||o.check==='unchecked'){const t=document.createElement('span');t.className='vf '+(o.check==='quote'?'ok':'neu');t.textContent=o.check==='quote'?'quote found on the page':'check on the store';li.appendChild(t)}const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
   $('prevList').innerHTML='';const pv=c.prevObservations||[];$('prevObs').hidden=!pv.length;
   pv.forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('prevList').appendChild(li)});
   $('email').value=c.to||'';mailPick(f.emails||[]);$('verified').checked=false;gate();$('social').value=c.profile||'';
-  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';
+  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';$('notes').value=c.notes||'';$('theirReply').value='';$('replyMsg').textContent='';drawSpeed(c.speed);
   count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
 }
 function sync(){
   current.to=$('email').value.trim();current.profile=$('social').value.trim();
   current.email={subject:$('subj').value,body:$('body').value};current.dm=$('dm').value;
-  current.phone=$('wa').value.trim();current.whatsapp=$('waMsg').value;
+  current.phone=$('wa').value.trim();current.whatsapp=$('waMsg').value;current.notes=$('notes').value;
 }
-['email','social','subj','body','dm','wa','waMsg'].forEach(i=>$(i).addEventListener('change',()=>{if(current){sync();upsert(current)}}));
+['email','social','subj','body','dm','wa','waMsg','notes'].forEach(i=>$(i).addEventListener('change',()=>{if(current){sync();upsert(current)}}));
 ['subj','body','dm','waMsg'].forEach(i=>$(i).addEventListener('input',count));
 function markWa(){const v=$('wa').value.replace(/\D/g,'');[...$('waChips').children].forEach(b=>b.classList.toggle('on',b.dataset.n===v))}
 function waPick(ph){const box=$('waChips');box.innerHTML='';$('waPick').hidden=ph.length<2;
@@ -356,7 +384,7 @@ $('followBtn').onclick=async()=>{
   if(n>=2){$('followMsg').textContent='Two follow-ups is enough. Move on to the next store.';return}
   $('followBtn').disabled=true;$('followMsg').textContent='Writing...';
   try{
-    const d=await call('/api/audit',{mode:'followup',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,firstWa:first.whatsapp,count:n,services:$('services').value,voice:($('voice')||{}).value||''});
+    const d=await call('/api/audit',{mode:'followup',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,firstWa:first.whatsapp,count:n,speed:current.speed,services:$('services').value,voice:($('voice')||{}).value||''});
     current.first=first;current.followups=n+1;current.email=d.email;current.dm=d.dm;current.whatsapp=d.whatsapp;
     $('subj').value=d.email?.subject||'';$('body').value=d.email?.body||'';$('dm').value=d.dm||'';$('waMsg').value=d.whatsapp||'';
     count();upsert(current);
@@ -375,12 +403,103 @@ $('reauditBtn').onclick=async()=>{
       followups:old.followups||0,
       email:old.email,dm:old.dm,whatsapp:old.whatsapp,
       to:old.to||c.to,phone:old.phone||c.phone,profile:old.profile||c.profile,
-      prevObservations:old.observations||[]};
+      prevObservations:old.observations||[],notes:old.notes,speed:old.speed};
     upsert(m);show(m);
     $('followMsg').textContent='Fresh audit loaded. Check the new points on the store, then tap Draft a follow-up.';
   }catch(e){$('followMsg').textContent=e.message}
   $('reauditBtn').disabled=false;
 };
+/* ---------- lead score: who is worth contacting first ---------- */
+function score(l){const d=l.data||{},f=d.found||{},s=d.signals||{};let n=0;
+  const em=String(d.to||f.email||'');if(em)n+=HELP_RE.test(em.split('@')[0].replace(/\+.*$/,''))?1:3;
+  if(d.phone||f.phone)n++;if(d.profile||f.instagram)n++;
+  if(s.emailToolDetected===false)n+=2;if(s.emailSignupFormDetected===false)n++;
+  if(/shopify|woocommerce/i.test(d.platform||''))n++;
+  if((d.observations||[]).length>=3)n++;
+  if(d.speed&&d.speed.score<50)n++;
+  return Math.min(10,n)}
+const scoreLabel=n=>n>=7?'hot':n>=4?'warm':'cold';
+function scoreBadge(l){const n=score(l),b=document.createElement('span');b.className='sc '+scoreLabel(n);b.textContent=n+' '+scoreLabel(n);b.title='Priority out of 10. A reachable owner email, a phone or Instagram, no email tool, no signup form and a solid audit all raise it.';return b}
+
+/* ---------- results: what is getting replies ---------- */
+const TLD={uk:'United Kingdom',au:'Australia',ng:'Nigeria',ca:'Canada',ie:'Ireland',nz:'New Zealand',za:'South Africa',de:'Germany',fr:'France',es:'Spain',it:'Italy',nl:'Netherlands',in:'India',cl:'Chile',br:'Brazil',se:'Sweden',gh:'Ghana',ke:'Kenya'};
+const CC=[['234','Nigeria'],['233','Ghana'],['254','Kenya'],['353','Ireland'],['44','United Kingdom'],['61','Australia'],['27','South Africa'],['1','US or Canada']];
+function region(l){try{const t=new URL(l.url).hostname.split('.').pop().toLowerCase();if(TLD[t])return TLD[t]}catch{}
+  const p=String((l.data&&(l.data.phone||(l.data.found&&l.data.found.phone)))||'').replace(/\D/g,'');const m=CC.find(x=>p.startsWith(x[0]));return m?m[1]:'Not clear (.com)'}
+const isContacted=l=>!!l.emailed||['Contacted','Replied','Won'].includes(l.status);
+const isReplied=l=>l.status==='Replied'||l.status==='Won';
+function renderStats(){
+  const C=LEADS.filter(isContacted);$('resCard').hidden=!C.length;if(!C.length)return;
+  const R=C.filter(isReplied),W=C.filter(l=>l.status==='Won'),B=LEADS.filter(l=>l.status==='Bounced');
+  const pct=(a,b)=>b?Math.round(a/b*100)+'%':'-';
+  const sum=$('resSum');sum.innerHTML='';
+  ['Contacted '+C.length,'Replied '+R.length+' ('+pct(R.length,C.length)+')','Won '+W.length,'Bounced '+B.length].forEach((t,i)=>{const s=document.createElement('span');s.className='chip '+(i===3&&B.length?'bad':'neu');s.textContent=t;sum.appendChild(s)});
+  const body=$('resRows');body.innerHTML='';
+  const group=(title,keyFn)=>{const m={};C.forEach(l=>{const k=keyFn(l);(m[k]=m[k]||[]).push(l)});
+    const g=document.createElement('tr');g.className='grp';const gt=document.createElement('td');gt.colSpan=5;gt.textContent=title;g.appendChild(gt);body.appendChild(g);
+    Object.entries(m).sort((a,b)=>b[1].length-a[1].length).slice(0,8).forEach(([k,ls])=>{const r=ls.filter(isReplied).length,w=ls.filter(l=>l.status==='Won').length;
+      const tr=document.createElement('tr');[k,ls.length,r,w,pct(r,ls.length)].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.appendChild(td)});body.appendChild(tr)})};
+  group('By angle of the pitch',l=>(l.data&&l.data.angle)||'not tagged (older audit)');
+  group('By platform',l=>(l.data&&l.data.platform)||'unknown');
+  group('By region',region);
+  $('resNote').textContent=C.length<30?'Too few contacts so far to trust these numbers. Come back after about 30 to 50 emails.':'';
+}
+
+/* ---------- speed test ---------- */
+function drawSpeed(sp,shot){const b=$('speedBox');b.innerHTML='';if(!sp){b.hidden=true;return}
+  b.hidden=false;
+  if(shot){const im=document.createElement('img');im.src=shot;im.alt='How the page looked on a phone';b.appendChild(im)}
+  const d=document.createElement('div'),t=document.createElement('b');t.textContent='Mobile speed '+sp.score+' / 100';d.appendChild(t);
+  const p=document.createElement('div');p.className='hint';
+  p.textContent=[sp.lcp&&'Main content shows in '+sp.lcp,sp.fcp&&'First paint '+sp.fcp,sp.tbt&&'Blocking time '+sp.tbt].filter(Boolean).join(' · ')+(sp.at?' · tested '+ago(sp.at):'');
+  d.appendChild(p);b.appendChild(d)}
+$('speedBtn').onclick=async()=>{
+  if(!current)return;sync();
+  $('speedBtn').disabled=true;$('followMsg').textContent="Running Google's mobile speed test. This takes up to 30 seconds...";
+  try{
+    const d=await call('/api/speed',{url:current.url});
+    current.speed={score:d.score,lcp:d.lcp,fcp:d.fcp,tbt:d.tbt,cls:d.cls,at:d.at};
+    drawSpeed(current.speed,d.screenshot);upsert(current);
+    $('followMsg').textContent='Speed test done. A low score is used in your next follow-up.';
+  }catch(e){$('followMsg').textContent=e.message}
+  $('speedBtn').disabled=false;
+};
+
+/* ---------- reply helper, do-not-contact, blocked list ---------- */
+$('replyBtn').onclick=async()=>{
+  if(!current)return;sync();
+  const txt=$('theirReply').value.trim();if(!txt){$('replyMsg').textContent='Paste what they wrote first.';return}
+  current.first=current.first||{email:current.email,dm:current.dm,whatsapp:current.whatsapp};
+  $('replyBtn').disabled=true;$('replyMsg').textContent='Writing...';
+  try{
+    const d=await call('/api/audit',{mode:'reply',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:current.first.email,theirReply:txt,services:$('services').value});
+    $('subj').value=d.subject||('Re: '+((current.first.email||{}).subject||''));$('body').value=d.body||'';count();
+    current.email={subject:$('subj').value,body:$('body').value};
+    upsert(current,d.intent==='declined'?undefined:'Replied');
+    $('replyMsg').textContent=d.intent==='declined'?'They said no. Review the polite close, then tap Do not contact this lead.':'Reply drafted in the Email box above. Read it, then send.';
+  }catch(e){$('replyMsg').textContent=e.message}
+  $('replyBtn').disabled=false;
+};
+$('dncBtn').onclick=async()=>{
+  if(!current)return;sync();
+  if(!confirm('Mark '+name()+' as do not contact'+(current.to?' and block '+current.to+' from future emails':'')+'?'))return;
+  try{if(current.to)await call('/api/suppress',{op:'add',email:current.to,reason:'do_not_contact'})}catch(e){toast(e.message)}
+  upsert(current,'Dropped');toast('Marked as do not contact');if($('blkBox').open)loadBlocked();
+};
+async function loadBlocked(){
+  const box=$('blkList');box.textContent='Loading...';
+  try{const d=await call('/api/suppress',{op:'list'});box.innerHTML='';
+    if(!d.rows.length){box.textContent='Nobody is blocked yet.';return}
+    const LBL={bounced:'bounced',complained:'marked as spam',asked_to_stop:'asked to stop',do_not_contact:'you blocked'};
+    d.rows.forEach(r=>{const row=document.createElement('div');row.style.cssText='display:flex;justify-content:space-between;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)';
+      const t=document.createElement('span');t.textContent=r.email+' ('+(LBL[r.reason]||r.reason)+')';
+      const b=document.createElement('button');b.className='ghost';b.style.padding='4px 10px';b.textContent='Unblock';
+      b.onclick=async()=>{if(!confirm('Allow emails to '+r.email+' again?'))return;try{await call('/api/suppress',{op:'remove',email:r.email});loadBlocked()}catch(e){toast(e.message)}};
+      row.append(t,b);box.appendChild(row)});
+  }catch(e){box.textContent=e.message}
+}
+$('blkBox').addEventListener('toggle',()=>{if($('blkBox').open)loadBlocked()});
+
 function upsert(c,status,emailed){
   const i=LEADS.findIndex(l=>l.url===c.url);let l;const was=i>=0&&noContact(LEADS[i]);
   const follow=status==='Contacted'?Date.now()+4*DAY:null;
@@ -416,8 +535,9 @@ function render(){
   main.slice(0,5).forEach(l=>{
     const tr=document.createElement('tr');
     const a=document.createElement('td');a.textContent=l.name;timeCell(a,l);
+    const sc=document.createElement('td');sc.appendChild(scoreBadge(l));
     const s=document.createElement('td'),sel=document.createElement('select');
-    ['New','Contacted','Replied','Won','Dropped'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
+    ['New','Contacted','Replied','Won','Dropped','Bounced'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
     sel.onchange=()=>{l.status=sel.value;if(sel.value==='Contacted'&&!l.follow)l.follow=Date.now()+4*DAY;saveLead(l);render()};
     s.appendChild(sel);
     const f=document.createElement('td');f.textContent=l.follow?new Date(l.follow).toDateString():'-';
@@ -426,9 +546,9 @@ function render(){
     const o=document.createElement('button');o.textContent='Open';o.onclick=()=>l.data?show(l.data):toast('No saved audit for this lead');
     const b=document.createElement('button');b.className='ghost';b.textContent='Remove';
     b.onclick=()=>{LEADS=LEADS.filter(y=>y.url!==l.url);store.set('leads',LEADS);call('/api/leads',{op:'delete',url:l.url}).catch(()=>toast('Could not remove online'));render()};
-    x.append(o,b);tr.append(a,s,f,x);$('rows').appendChild(tr);
+    x.append(o,b);tr.append(a,sc,s,f,x);$('rows').appendChild(tr);
   });
-  renderNC(ncs);
+  renderNC(ncs);renderStats();
 }
 function renderNC(ncs){
   $('ncCard').hidden=!ncs.length;$('ncCount').textContent='('+ncs.length+')';

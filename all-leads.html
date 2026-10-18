@@ -15,7 +15,7 @@ header a{color:#fff;font-weight:700}
 h1{margin:10px 0 0;font-size:1.9rem;letter-spacing:-.02em}
 main{max-width:980px;margin:-48px auto 48px;padding:0 16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
-.bar{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:14px}
+.bar{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px}
 @media(max-width:640px){.bar{grid-template-columns:1fr}}
 input,select{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--field);color:var(--ink);font:inherit}
 :focus-visible{outline:3px solid #ffd23f;outline-offset:1px}
@@ -29,6 +29,9 @@ td.late{color:var(--coral);font-weight:700}
 td.acts{white-space:nowrap}td.acts button{margin-right:6px;padding:6px 12px}
 .pager{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap}
 .hint{color:var(--mute);font-size:.92rem}
+.sc{display:inline-block;padding:2px 9px;border-radius:99px;font-size:.78rem;font-weight:800;white-space:nowrap}
+.sc.hot{background:#d9f5ea;color:#07603f}.sc.warm{background:#fff0c9;color:#7a5200}.sc.cold{background:#e6e8f7;color:#5d6384}
+:root[data-theme=dark] .sc.hot{background:#123a2d;color:#7be0b4}:root[data-theme=dark] .sc.warm{background:#4a3b10;color:#ffd98a}:root[data-theme=dark] .sc.cold{background:#252a4d;color:#9aa0c4}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:12px 20px;border-radius:99px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
 .toast.show{opacity:1}
 </style>
@@ -38,12 +41,14 @@ td.acts{white-space:nowrap}td.acts button{margin-right:6px;padding:6px 12px}
 <main><section class="card">
   <div class="bar">
     <input id="q" type="search" placeholder="Search store name or link" aria-label="Search">
-    <select id="st" aria-label="Status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Replied</option><option>Won</option><option>Dropped</option><option value="__due">Follow-ups due</option><option value="__today">Emailed today</option><option value="__nc">No contact found</option></select>
+    <select id="st" aria-label="Status"><option value="">All statuses</option><option>New</option><option>Contacted</option><option>Replied</option><option>Won</option><option>Dropped</option><option>Bounced</option><option value="__due">Follow-ups due</option><option value="__today">Emailed today</option><option value="__nc">No contact found</option></select>
+    <select id="sort" aria-label="Sort"><option value="">Newest first</option><option value="score">Hottest first</option></select>
     <select id="size" aria-label="Per page"><option value="50">50 per page</option><option value="100">100 per page</option><option value="200">200 per page</option><option value="500">500 per page</option></select>
   </div>
   <p id="msg" class="hint"></p>
-  <div class="scroll"><table><thead><tr><th>Store</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="scroll"><table><thead><tr><th>Store</th><th>Score</th><th>Status</th><th>Follow up</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
   <div class="pager"><button class="ghost" id="prev">Previous</button><span id="pageInfo" class="hint"></span><button class="ghost" id="next">Next</button></div>
+  <div style="margin-top:14px"><button class="ghost" id="csv" type="button">Download CSV backup</button> <span class="hint">All your leads in one file you can keep.</span></div>
 </section></main>
 <div class="toast" id="toast" role="status"></div>
 <script>
@@ -66,6 +71,26 @@ async function call(payload){
   const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Failed');return d;
 }
 function save(l){store.set('leads',LEADS);call({op:'save',lead:l}).catch(()=>toast('Could not sync. Saved on this device.'))}
+const HELP_RE=/^(support|help|care|customer-?care|customer-?service|service|orders?|returns?|shipping|billing|accounts?|refunds?|tickets?|helpdesk)$/i;
+function score(l){const d=l.data||{},f=d.found||{},s=d.signals||{};let n=0;
+  const em=String(d.to||f.email||'');if(em)n+=HELP_RE.test(em.split('@')[0].replace(/\+.*$/,''))?1:3;
+  if(d.phone||f.phone)n++;if(d.profile||f.instagram)n++;
+  if(s.emailToolDetected===false)n+=2;if(s.emailSignupFormDetected===false)n++;
+  if(/shopify|woocommerce/i.test(d.platform||''))n++;
+  if((d.observations||[]).length>=3)n++;
+  if(d.speed&&d.speed.score<50)n++;
+  return Math.min(10,n)}
+const scoreLabel=n=>n>=7?'hot':n>=4?'warm':'cold';
+function scoreBadge(l){const n=score(l),b=document.createElement('span');b.className='sc '+scoreLabel(n);b.textContent=n+' '+scoreLabel(n);b.title='Priority out of 10. A reachable owner email, a phone or Instagram, no email tool, no signup form and a solid audit all raise it.';return b}
+$('csv').onclick=()=>{
+  const cols=['Name','URL','Status','Score','Email','Phone','Profile','Platform','Angle','Emailed','Follow up','Notes'];
+  const esc=v=>{let t=String(v==null?'':v);if(/^[=+\-@]/.test(t))t="'"+t;return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t};
+  const date=t=>t?new Date(t).toISOString().slice(0,10):'';
+  const rows=LEADS.map(l=>{const d=l.data||{},f=d.found||{};return [l.name,l.url,l.status,score(l),d.to||f.email||'',d.phone||f.phone||'',d.profile||'',d.platform||'',d.angle||'',date(l.emailed),date(l.follow),d.notes||''].map(esc).join(',')});
+  const blob=new Blob(['\ufeff'+[cols.join(','),...rows].join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='leads-backup-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('Backup downloaded');
+};
 function filtered(){
   const q=$('q').value.trim().toLowerCase(),st=$('st').value,now=Date.now();
   const out=LEADS.filter(l=>{
@@ -76,7 +101,8 @@ function filtered(){
     if(st==='__today')return !!l.emailed&&new Date(l.emailed).toDateString()===new Date().toDateString();
     return !st||l.status===st;
   });
-  if(st==='__due')out.sort((x,y)=>x.follow-y.follow);
+  if($('sort').value==='score')out.sort((x,y)=>score(y)-score(x)||(x.follow||0)-(y.follow||0));
+  else if(st==='__due')out.sort((x,y)=>x.follow-y.follow);
   return out;
 }
 function render(){
@@ -87,8 +113,10 @@ function render(){
   $('rows').innerHTML='';
   F.slice(page*size,page*size+size).forEach(l=>{
     const tr=document.createElement('tr'),a=document.createElement('td');a.textContent=l.name||l.url;timeCell(a,l);
+    if(l.data&&l.data.notes){const n=document.createElement('div');n.className='hint';n.style.cssText='font-size:12px;margin-top:2px';n.textContent='Note: '+String(l.data.notes).slice(0,90);a.appendChild(n)}
+    const sc=document.createElement('td');sc.appendChild(scoreBadge(l));
     const s=document.createElement('td'),sel=document.createElement('select');
-    ['New','Contacted','Replied','Won','Dropped'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
+    ['New','Contacted','Replied','Won','Dropped','Bounced'].forEach(x=>{const o=new Option(x,x);o.selected=x===l.status;sel.add(o)});
     sel.onchange=()=>{l.status=sel.value;if(sel.value==='Contacted'&&!l.follow)l.follow=Date.now()+4*DAY;save(l);render()};
     s.appendChild(sel);
     const f=document.createElement('td');f.textContent=l.follow?new Date(l.follow).toDateString():'-';
@@ -97,12 +125,12 @@ function render(){
     const o=document.createElement('button');o.textContent='Open';o.onclick=()=>{location.href='index.html?open='+encodeURIComponent(l.url)};
     const b=document.createElement('button');b.className='ghost';b.textContent='Remove';
     b.onclick=()=>{if(!confirm('Remove '+(l.name||l.url)+'?'))return;LEADS=LEADS.filter(y=>y.url!==l.url);store.set('leads',LEADS);call({op:'delete',url:l.url}).catch(()=>toast('Could not remove online'));render()};
-    x.append(o,b);tr.append(a,s,f,x);$('rows').appendChild(tr);
+    x.append(o,b);tr.append(a,sc,s,f,x);$('rows').appendChild(tr);
   });
   $('pageInfo').textContent='Page '+(page+1)+' of '+pages+' ('+F.length+' leads)';
   $('prev').disabled=page===0;$('next').disabled=page>=pages-1;
 }
-['q','st','size'].forEach(i=>$(i).addEventListener('input',()=>{page=0;render()}));
+['q','st','sort','size'].forEach(i=>$(i).addEventListener('input',()=>{page=0;render()}));
 $('prev').onclick=()=>{page--;render()};$('next').onclick=()=>{page++;render()};
 {const f=new URLSearchParams(location.search).get('f');if(f)$('st').value=({due:'__due',today:'__today'})[f]||f}
 render();
