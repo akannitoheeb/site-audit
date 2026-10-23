@@ -169,11 +169,11 @@ tr.grp td{font-weight:800;background:var(--chip)}
       <p class="hint">Opens WhatsApp with the message ready. You review and tap send yourself.</p>
       <label for="wa">Their WhatsApp number (auto-filled if the store shows one)</label>
       <input id="wa" type="tel" inputmode="tel" placeholder="+2348012345678">
-      <div id="waPick" hidden><p class="hint" style="margin:10px 0 6px">More than one number was found. Tap one to try it. If WhatsApp says the number is not on WhatsApp, tap the next one.</p><div class="chips" id="waChips" style="margin:0"></div></div>
+      <div id="waPick" hidden><p class="hint" style="margin:10px 0 6px">Phone numbers found on the site. The store did not say they are on WhatsApp, and many are landlines. Tap one to try it, or use Call. If WhatsApp says the number is not on WhatsApp, tap the next one.</p><div class="chips" id="waChips" style="margin:0"></div></div>
       <label for="waMsg">Message</label>
       <textarea id="waMsg" style="min-height:140px"></textarea>
       <div class="count" id="waCount"></div>
-      <div class="actions"><button id="openWa">Open in WhatsApp</button><button class="ghost" id="copyWa">Copy</button><button class="ghost" id="markWa">Mark sent</button></div>
+      <div class="actions"><button id="openWa">Open in WhatsApp</button><button class="ghost" id="callBtn" type="button">Call this number</button><button class="ghost" id="copyWa">Copy</button><button class="ghost" id="markWa">Mark sent</button></div>
     </section>
     <button class="ghost" id="closeBottom" type="button" style="width:100%;margin:0 0 20px">Done, close this audit</button>
   </div>
@@ -252,7 +252,8 @@ async function runAudit(url){
   url=norm(url.trim());
   const d=await call('/api/audit',{url,services:$('services').value,voice:$('voice').value});
   const f=d.found||{};
-  return {...d,url,auditedAt:Date.now(),to:f.email||'',phone:f.phone||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
+  // phone = the WhatsApp field. Only a number the site itself publishes as WhatsApp fills it. Other phone lines stay as tap-to-try chips.
+  return {...d,url,auditedAt:Date.now(),to:f.email||'',phone:f.waNumber||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
 }
 
 const chip=(t,c)=>{const s=document.createElement('span');s.className='chip '+c;s.textContent=t;$('chips').appendChild(s)};
@@ -271,8 +272,9 @@ function show(c){
   if(c.speed)chip('Mobile speed '+c.speed.score+'/100',c.speed.score>=70?'ok':c.speed.score>=50?'neu':'bad');
   chip(f.email?'Email found':'No email on the site',f.email?'ok':'bad');
   chip(f.phone?((f.phones||[]).length>1?(f.phones.length+' phone numbers found'):'Phone found'):'No phone on the site',f.phone?'ok':'bad');
+  if(f.waNumber)chip('WhatsApp number confirmed','ok');
   [['instagram','Instagram'],['facebook','Facebook'],['linkedin','LinkedIn'],['tiktok','TikTok'],['x','X'],['whatsapp','WhatsApp']].forEach(([k,n])=>{
-    if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found';$('chips').appendChild(a)});
+    if(!f[k])return;const a=document.createElement('a');a.className='chip ok';a.href=f[k];a.target='_blank';a.rel='noopener';a.textContent=n+' found'+(f[k+'Unsure']?' (check the name)':'');$('chips').appendChild(a)});
   $('obs').innerHTML='';
   (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;if(o.check==='quote'||o.check==='unchecked'){const t=document.createElement('span');t.className='vf '+(o.check==='quote'?'ok':'neu');t.textContent=o.check==='quote'?'quote found on the page':'check on the store';li.appendChild(t)}const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
   $('prevList').innerHTML='';const pv=c.prevObservations||[];$('prevObs').hidden=!pv.length;
@@ -289,7 +291,7 @@ function sync(){
 ['email','social','subj','body','dm','wa','waMsg','notes'].forEach(i=>$(i).addEventListener('change',()=>{if(current){sync();upsert(current)}}));
 ['subj','body','dm','waMsg'].forEach(i=>$(i).addEventListener('input',count));
 function markWa(){const v=$('wa').value.replace(/\D/g,'');[...$('waChips').children].forEach(b=>b.classList.toggle('on',b.dataset.n===v))}
-function waPick(ph){const box=$('waChips');box.innerHTML='';$('waPick').hidden=ph.length<2;
+function waPick(ph){const box=$('waChips');box.innerHTML='';$('waPick').hidden=!ph.length;
   ph.forEach(p=>{const b=document.createElement('button');b.type='button';b.className='ghost';b.style.padding='6px 12px';b.textContent='+'+p;b.dataset.n=p;
     b.onclick=()=>{$('wa').value='+'+p;markWa();if(current){sync();upsert(current)}};box.appendChild(b)});markWa()}
 $('wa').addEventListener('input',markWa);
@@ -370,6 +372,7 @@ $('markDm').onclick=()=>{sync();upsert(current,'Contacted');toast('Marked as con
 const waNum=()=>{let d=$('wa').value.replace(/\D/g,'');if(/^0[789][01]\d{8}$/.test(d))d='234'+d.slice(1);return d};
 $('openWa').onclick=()=>{const n=waNum();if(n.length<10){toast('Add their WhatsApp number first');return}
   window.open('https://wa.me/'+n+'?text='+encodeURIComponent($('waMsg').value),'_blank','noopener')};
+$('callBtn').onclick=()=>{const n=waNum();if(n.length<8){toast('Add or pick a number first');return}location.href='tel:+'+n};
 $('copyWa').onclick=()=>{navigator.clipboard.writeText($('waMsg').value);toast('WhatsApp message copied')};
 $('markWa').onclick=()=>{sync();upsert(current,'Contacted');toast('Marked as contacted')};
 const name=()=>current.storeName||current.url;
