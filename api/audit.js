@@ -1,11 +1,11 @@
 // POST /api/audit  { url, email, social, services }
 // Header: x-app-password
 
-const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.)/;
+const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[|.*\.(local|internal|localhost)$)/i;
 const UA = { 'user-agent': 'Mozilla/5.0 (compatible; ATM-Audit/1.0)' };
 const JUNK = /\.(png|jpe?g|gif|webp|svg)$|sentry|wixpress|example\.|domain\.com|your@|@2x/i;
 const SOCIAL = {
-  instagram: /https?:\/\/(?:www\.)?instagram\.com\/(?!p\/|reel|explore|accounts|sharer)[A-Za-z0-9._]+\/?/i,
+  instagram: /https?:\/\/(?:www\.)?instagram\.com\/(?!p\/|reels?\/|explore|accounts|sharer|share|stories|direct|tv\/|about|legal|developer)[A-Za-z0-9._]{2,30}\/?/i,
   facebook: /https?:\/\/(?:www\.)?facebook\.com\/(?!sharer|share|tr\b|plugins|dialog)[A-Za-z0-9.\-_\/]+/i,
   linkedin: /https?:\/\/(?:[a-z]+\.)?linkedin\.com\/(?:company|in)\/[A-Za-z0-9\-_%]+/i,
   tiktok: /https?:\/\/(?:www\.)?tiktok\.com\/@[A-Za-z0-9._]+/i,
@@ -42,6 +42,45 @@ function normalizePhone(raw, cc = '') {
   return null;
 }
 
+// Numbers that are clearly not real phone lines (1234567890, 0000000000, 5555555555 ...)
+function junkPhone(d) {
+  const t = d.slice(-10);
+  return /^(\d)\1+$/.test(t) || '01234567890123456789'.includes(t) || '98765432109876543210'.includes(t);
+}
+
+// Picks the Instagram / Facebook handle that most looks like the store's own, not a theme author's or an app's
+const BAD_HANDLE = /^(p|reels?|explore|accounts|sharer|share|stories|direct|tv|about|legal|developer|shopify|instagram|facebook|meta|login|policies|tr|plugins|dialog|dialog|intent|home|profile\.php|sharer\.php|share\.php)$/i;
+function pickSocial(html, host, kind) {
+  const re = kind === 'instagram' ? /instagram\.com\/([A-Za-z0-9._]{2,30})/gi : /facebook\.com\/([A-Za-z0-9.\-_]{3,50})/gi;
+  const flat = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const label = flat(host.replace(/^www\./, '').split('.')[0]);
+  const seen = [];
+  for (const m of html.matchAll(re)) {
+    const h = m[1].replace(/\.$/, '');
+    if (BAD_HANDLE.test(h) || /\.(php|html?|png|jpe?g|gif|svg|js|css)$/i.test(h)) continue;
+    if (!seen.includes(h)) seen.push(h);
+  }
+  if (!seen.length) return null;
+  const hit = seen.find((h) => label.length > 2 && (flat(h).includes(label) || label.includes(flat(h))));
+  const best = hit || seen[0];
+  return { url: `https://${kind === 'instagram' ? 'www.instagram.com' : 'www.facebook.com'}/${best}`, sure: Boolean(hit) };
+}
+
+// Same-site contact page links only. A "mailto:contact@..." link must never count as a contact page.
+function contactPaths(html, target) {
+  const out = [];
+  for (const m of html.matchAll(/href=["']([^"'#\s]*contact[^"'#\s]*)["']/gi)) {
+    if (/^(mailto|tel|javascript|sms|whatsapp):/i.test(m[1])) continue;
+    try {
+      const u = new URL(m[1], target);
+      if (u.hostname.replace(/^www\./, '') === target.hostname.replace(/^www\./, '') && !out.includes(u.pathname)) out.push(u.pathname);
+    } catch {}
+    if (out.length >= 2) break;
+  }
+  for (const p of ['/pages/contact', '/contact', '/pages/contact-us', '/contact-us']) if (!out.includes(p)) out.push(p);
+  return out.slice(0, 4);
+}
+
 // Finds every phone number on the page, best sources first, in any country format
 function findPhones(html, host) {
   let cc = TLD_CC[host.split('.').pop().toLowerCase()] || '';
@@ -62,7 +101,7 @@ function findPhones(html, host) {
   const out = [];
   for (const c of [...strong, ...weak]) {
     const n = normalizePhone(c, cc);
-    if (n && !out.some((m) => m.slice(-10) === n.slice(-10))) out.push(n); // skip repeats and the same number written two ways
+    if (n && !junkPhone(n) && !out.some((m) => m.slice(-10) === n.slice(-10))) out.push(n); // skip repeats and the same number written two ways
   }
   return out.slice(0, 5);
 }
@@ -135,6 +174,12 @@ function findContacts(html, host) {
   out.phones = findPhones(html, host);
   out.phone = out.phones[0] || null;
   for (const [k, re] of Object.entries(SOCIAL)) out[k] = (html.match(re) || [])[0] || null;
+  const ig = pickSocial(html, host, 'instagram'), fb = pickSocial(html, host, 'facebook');
+  if (ig) { out.instagram = ig.url; out.instagramUnsure = !ig.sure; } // unsure = handle does not look like the store name
+  if (fb) { out.facebook = fb.url; out.facebookUnsure = !fb.sure; }
+  // Only a wa.me / api.whatsapp.com link PROVES a number is on WhatsApp. Other phone numbers may be landlines.
+  const wa = html.match(/(?:wa\.me\/|whatsapp\.com\/send\/?\?phone=)(\d{8,15})/i);
+  out.waNumber = wa ? wa[1] : null;
   return out;
 }
 
@@ -328,11 +373,9 @@ Speed test (Google PageSpeed, mobile): ${b.speed ? `score ${b.speed.score} of 10
     return res.status(422).json({ error: 'This store blocks automated readers (it returned a bot-check page), so it cannot be audited here. Review it by hand or try another store.' });
 
   // Look for contact details on the store's own public pages (homepage plus contact pages)
-  const cm = html.match(/href=["']([^"']*contact[^"']*)["']/i);
-  const paths = cm ? [cm[1]] : ['/pages/contact', '/contact', '/pages/contact-us', '/contact-us'];
+  const paths = contactPaths(html, target);
   const pages = await Promise.allSettled(paths.map(async (p) => {
     const u = new URL(p, target);
-    if (u.hostname !== target.hostname) return '';
     const rr = await fetch(u, { headers: UA, signal: AbortSignal.timeout(6000) });
     return rr.ok ? await rr.text() : '';
   }));
