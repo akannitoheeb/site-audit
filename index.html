@@ -157,6 +157,7 @@ tr.grp td{font-weight:800;background:var(--chip)}
         <p class="hint">Social apps block bots, so you paste this yourself.</p>
         <label for="social">Their profile link</label>
         <input id="social" type="url" placeholder="https://instagram.com/theirstore">
+        <div id="socialPick" hidden><p class="hint" style="margin:10px 0 6px">More than one profile was found. Tap one to use it for the DM.</p><div class="chips" id="socialChips" style="margin:0"></div></div>
         <div class="actions" style="margin-top:8px"><button class="ghost" id="findSocial" type="button">Search for their Instagram</button></div>
         <label for="dm">Message</label>
         <textarea id="dm" style="min-height:140px"></textarea>
@@ -279,7 +280,7 @@ function show(c){
   (c.observations||[]).forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;if(o.check==='quote'||o.check==='unchecked'){const t=document.createElement('span');t.className='vf '+(o.check==='quote'?'ok':'neu');t.textContent=o.check==='quote'?'quote found on the page':'check on the store';li.appendChild(t)}const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('obs').appendChild(li)});
   $('prevList').innerHTML='';const pv=c.prevObservations||[];$('prevObs').hidden=!pv.length;
   pv.forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('prevList').appendChild(li)});
-  $('email').value=c.to||'';mailPick(f.emails||[]);$('verified').checked=false;gate();$('social').value=c.profile||'';
+  $('email').value=c.to||'';mailPick(f.emails||[]);$('verified').checked=false;gate();$('social').value=c.profile||'';socialPick(f);
   $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';$('notes').value=c.notes||'';$('theirReply').value='';$('replyMsg').textContent='';drawSpeed(c.speed);
   count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
 }
@@ -295,6 +296,13 @@ function waPick(ph){const box=$('waChips');box.innerHTML='';$('waPick').hidden=!
   ph.forEach(p=>{const b=document.createElement('button');b.type='button';b.className='ghost';b.style.padding='6px 12px';b.textContent='+'+p;b.dataset.n=p;
     b.onclick=()=>{$('wa').value='+'+p;markWa();if(current){sync();upsert(current)}};box.appendChild(b)});markWa()}
 $('wa').addEventListener('input',markWa);
+const SOC=[['instagram','Instagram'],['facebook','Facebook'],['tiktok','TikTok'],['linkedin','LinkedIn'],['x','X']];
+function markSocial(){const v=$('social').value.trim();[...$('socialChips').children].forEach(b=>b.classList.toggle('on',b.dataset.u===v))}
+function socialPick(f){const box=$('socialChips');box.innerHTML='';
+  const list=SOC.filter(([k])=>f[k]);$('socialPick').hidden=list.length<2;
+  list.forEach(([k,n])=>{const b=document.createElement('button');b.type='button';b.className='ghost';b.style.padding='6px 12px';b.dataset.u=f[k];b.textContent=n+(f[k+'Unsure']?' (check the name)':'');
+    b.onclick=()=>{$('social').value=f[k];markSocial();if(current){sync();upsert(current)}};box.appendChild(b)});markSocial()}
+$('social').addEventListener('input',markSocial);
 const HELP_RE=/^(support|help|care|customer-?care|customer-?service|service|orders?|returns?|shipping|billing|accounts?|refunds?|tickets?|helpdesk)$/i;
 function mailNote(){const v=$('email').value.trim().toLowerCase();$('mailWarn').hidden=!(v.includes('@')&&HELP_RE.test(v.split('@')[0].replace(/\+.*$/,'')));[...$('mailChips').children].forEach(b=>b.classList.toggle('on',b.dataset.e===v))}
 function mailPick(list){const box=$('mailChips');box.innerHTML='';$('mailPick').hidden=list.length<2;
