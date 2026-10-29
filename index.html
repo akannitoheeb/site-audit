@@ -23,10 +23,19 @@ main{max-width:980px;margin:-56px auto 64px;padding:0 16px}
 .stat span{color:var(--mute);font-size:.85rem}
 .stat.due b{color:var(--coral)}
 @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
-.steps{display:flex;gap:8px;margin:0 0 20px;padding:0;list-style:none;flex-wrap:wrap}
-.steps li{padding:6px 14px;border-radius:99px;background:var(--chip);color:var(--mute);font-weight:600;font-size:.85rem}
-.steps li.on{background:var(--ink);color:var(--card)}
-.steps li.done{background:var(--mint);color:#fff}
+.steps{display:flex;margin:6px 0 26px;padding:0;list-style:none;counter-reset:s}
+.steps li{flex:1;position:relative;text-align:center;padding-top:38px;color:var(--mute);font-weight:700;font-size:.88rem;line-height:1.25;transition:color .3s}
+.steps li::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:28px;height:28px;box-sizing:border-box;border-radius:7px;background:var(--card);border:2px solid var(--line);color:#fff;font-size:17px;line-height:24px;font-weight:800;z-index:1;transition:background .3s,border-color .3s}
+.steps li::after{content:'';position:absolute;top:12px;left:calc(-50% + 16px);right:calc(50% + 16px);height:4px;border-radius:2px;background:var(--line);transition:background .3s}
+.steps li:first-child::after{display:none}
+.steps li.done{color:var(--mint)}
+.steps li.done::before{content:'\2713';background:var(--mint);border-color:var(--mint)}
+.steps li.done::after,.steps li.on::after{background:var(--mint)}
+.steps li.on{color:var(--ink)}
+.steps li.on::before{border-color:var(--mint);box-shadow:0 0 0 4px rgba(15,157,107,.22);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 8px rgba(15,157,107,0)}}
+@media(prefers-reduced-motion:reduce){.steps li.on::before{animation:none}}
+@media(max-width:420px){.steps li{font-size:.74rem}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:20px}
 h2{font-size:1.2rem;margin:0 0 4px}
 .hint{color:var(--mute);margin:0 0 12px;font-size:.92rem}
@@ -76,7 +85,7 @@ tr.grp td{font-weight:800;background:var(--chip)}
 </head>
 <body>
 <header><div class="wrap">
-  <div class="top"><b>ATM OUTREACH</b><button id="theme" type="button">Dark mode</button></div>
+  <div class="top"><b>ATM OUTREACH</b><div style="display:flex;gap:8px"><button id="snd" type="button" aria-pressed="true">Sound: On</button><button id="theme" type="button">Dark mode</button></div></div>
   <h1>Find the gap.<br><mark>Send the pitch.</mark></h1>
   <p>Paste a store, get an honest audit and two personal drafts. You review. You send.</p>
 </div></header>
@@ -88,7 +97,7 @@ tr.grp td{font-weight:800;background:var(--chip)}
     <a class="stat" href="all-leads.html?f=today"><b id="sSent">0/100</b><span>Emails sent today</span></a>
     <a class="stat due" href="all-leads.html?f=due"><b id="sDue">0</b><span>Follow-ups due</span></a>
   </div>
-  <ol class="steps" id="steps"><li class="on">1 Add store</li><li>2 Audit</li><li>3 Review drafts</li><li>4 Send</li></ol>
+  <ol class="steps" id="steps" aria-label="Progress"><li class="on">Add store</li><li>Audit</li><li>Review drafts</li><li>Send</li></ol>
 
   <section class="card">
     <div class="actions" style="margin:0 0 6px"><button class="tab on" id="tSingle" type="button">One store</button><button class="tab" id="tBulk" type="button">Bulk (up to 20)</button></div>
@@ -149,7 +158,8 @@ tr.grp td{font-weight:800;background:var(--chip)}
         <label for="body">Message</label><textarea id="body"></textarea>
         <div class="count" id="bodyCount"></div>
         <div class="hint" id="spamNote" style="margin-top:6px"></div>
-        <div class="actions"><button id="send">Send email</button><button class="ghost" id="copyMail">Copy</button></div>
+        <div class="actions"><button id="send">Send email</button><button class="ghost" id="copyMail">Copy</button><button class="ghost" id="rwEmail" type="button">Rewrite email</button><button class="ghost" id="undoEmail" type="button" hidden>Undo</button></div>
+        <div class="hint" id="rwMsgEmail" role="status" style="margin-top:6px"></div>
         <div id="sendMsg" role="status" class="hint" style="margin-top:8px"></div>
       </section>
       <section class="card">
@@ -162,7 +172,8 @@ tr.grp td{font-weight:800;background:var(--chip)}
         <label for="dm">Message</label>
         <textarea id="dm" style="min-height:140px"></textarea>
         <div class="count" id="dmCount"></div>
-        <div class="actions"><button class="ghost" id="copyDm">Copy DM</button><button class="ghost" id="openSocial">Open profile</button><button class="ghost" id="markDm">Mark sent</button></div>
+        <div class="actions"><button class="ghost" id="copyDm">Copy DM</button><button class="ghost" id="openSocial">Open profile</button><button class="ghost" id="markDm">Mark sent</button><button class="ghost" id="rwDm" type="button">Rewrite DM</button><button class="ghost" id="undoDm" type="button" hidden>Undo</button></div>
+        <div class="hint" id="rwMsgDm" role="status" style="margin-top:6px"></div>
       </section>
     </div>
     <section class="card">
@@ -174,7 +185,8 @@ tr.grp td{font-weight:800;background:var(--chip)}
       <label for="waMsg">Message</label>
       <textarea id="waMsg" style="min-height:140px"></textarea>
       <div class="count" id="waCount"></div>
-      <div class="actions"><button id="openWa">Open in WhatsApp</button><button class="ghost" id="callBtn" type="button">Call this number</button><button class="ghost" id="copyWa">Copy</button><button class="ghost" id="markWa">Mark sent</button></div>
+      <div class="actions"><button id="openWa">Open in WhatsApp</button><button class="ghost" id="callBtn" type="button">Call this number</button><button class="ghost" id="copyWa">Copy</button><button class="ghost" id="markWa">Mark sent</button><button class="ghost" id="rwWa" type="button">Rewrite WhatsApp</button><button class="ghost" id="undoWa" type="button" hidden>Undo</button></div>
+      <div class="hint" id="rwMsgWa" role="status" style="margin-top:6px"></div>
     </section>
     <button class="ghost" id="closeBottom" type="button" style="width:100%;margin:0 0 20px">Done, close this audit</button>
   </div>
@@ -221,6 +233,20 @@ $('theme').onclick=()=>{const d=document.documentElement.dataset.theme!=='dark';
 
 $('pw').value=store.get('pw','');$('services').value=store.get('services',$('services').value);
 $('voice').value=store.get('voice','');$('voice').addEventListener('input',()=>store.set('voice',$('voice').value));
+// Sound: a short chime when an audit finishes. It is made in the browser, so there is no sound file to load.
+let AC=null,SND=store.get('snd',true); // kept in memory too, so the switch still works if the browser blocks storage
+function unlockAudio(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume()}catch{}}
+function tone(f,t,d,v){const o=AC.createOscillator(),g=AC.createGain();o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+d+.05)}
+function chime(kind){
+  if(!SND)return;unlockAudio();if(!AC)return;const t=AC.currentTime+.03;
+  if(kind==='bulk')[523.25,659.25,783.99,1046.5].forEach((f,i)=>tone(f,t+i*.14,.55,.2));
+  else if(kind==='error'){tone(233,t,.3,.18);tone(175,t+.22,.45,.18)}
+  else{tone(659.25,t,.35,.2);tone(987.77,t+.13,.6,.2)}
+}
+function sndBtn(){const on=SND;$('snd').textContent='Sound: '+(on?'On':'Off');$('snd').setAttribute('aria-pressed',on)}
+sndBtn();
+$('snd').onclick=()=>{const on=SND=!SND;store.set('snd',on);sndBtn();if(on){unlockAudio();chime('single')}else toast('Sound off')};
+
 function mode(b){$('single').hidden=b;$('bulk').hidden=!b;$('tSingle').classList.toggle('on',!b);$('tBulk').classList.toggle('on',b);$('err').textContent=''}
 $('tSingle').onclick=()=>mode(false);$('tBulk').onclick=()=>mode(true);
 
@@ -237,7 +263,7 @@ function spamCheck(){
   if(wc(subj)>6)notes.push('shorten the subject to 6 words or fewer');
   if(wc(body)>90)notes.push('shorten the message (under 75 words works best)');
   const el=$('spamNote');el.textContent=notes.length?'Spam check: '+notes.join('; ')+'.':'Spam check: nothing risky found.';
-  el.style.color=notes.length?'#f08a7e':'#7fd8a6';
+  el.style.color=notes.length?'#f08a7e':'#7fd8a6';el.dataset.issues=notes.join('; ');$('rwEmail').classList.toggle('ghost',!notes.length);
 }
 function count(){spamCheck();$('bodyCount').textContent=wc($('body').value)+' words (aim for under 75)';$('dmCount').textContent=wc($('dm').value)+' words (aim for under 70)';$('waCount').textContent=wc($('waMsg').value)+' words (aim for under 90)'}
 
@@ -281,7 +307,7 @@ function show(c){
   $('prevList').innerHTML='';const pv=c.prevObservations||[];$('prevObs').hidden=!pv.length;
   pv.forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('prevList').appendChild(li)});
   $('email').value=c.to||'';mailPick(f.emails||[]);$('verified').checked=false;gate();$('social').value=c.profile||'';socialPick(f);
-  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';$('notes').value=c.notes||'';$('theirReply').value='';$('replyMsg').textContent='';drawSpeed(c.speed);
+  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';Object.values(RW).forEach(r=>{$(r.undo).hidden=true;$(r.msg).textContent=''});$('notes').value=c.notes||'';$('theirReply').value='';$('replyMsg').textContent='';drawSpeed(c.speed);
   count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
 }
 function sync(){
@@ -320,10 +346,10 @@ $('go').onclick=async()=>{
   $('err').textContent='';store.set('pw',$('pw').value);store.set('services',$('services').value);
   if(!$('url').value.trim()){$('err').textContent='Paste a store link first.';return}
   const msgs=['Loading the store...','Reading the page...','Spotting the gaps...','Writing your drafts...'];let m=0;
-  $('go').disabled=true;$('go').textContent=msgs[0];setStep(1);
+  unlockAudio();$('go').disabled=true;$('go').textContent=msgs[0];setStep(1);
   const timer=setInterval(()=>{m=Math.min(m+1,3);$('go').textContent=msgs[m]},2500);
-  try{const c=await runAudit($('url').value);show(c);upsert(c,'New');if(!hasContact(c))toast('No contact details found. Saved under No contact.')}
-  catch(e){$('err').textContent=e.message;setStep(0)}
+  try{const c=await runAudit($('url').value);show(c);upsert(c,'New');if(!hasContact(c))toast('No contact details found. Saved under No contact.');chime('single')}
+  catch(e){$('err').textContent=e.message;setStep(0);chime('error')}
   clearInterval(timer);$('go').disabled=false;$('go').textContent='Audit this store';
 };
 
@@ -336,7 +362,7 @@ async function auditOne(u){
     throw e}
 }
 async function runBulk(urls){
-  $('err').textContent='';$('bulkRetry').hidden=true;$('bulkGo').disabled=true;
+  unlockAudio();$('err').textContent='';$('bulkRetry').hidden=true;$('bulkGo').disabled=true;
   let ok=0,nc=0,lock=null;const fail=[],failed=[];
   try{lock=await navigator.wakeLock.request('screen')}catch{} // keeps the phone screen on so the run is not cut off
   for(let i=0;i<urls.length;i++){
@@ -352,6 +378,7 @@ async function runBulk(urls){
   $('bulkMsg').textContent='Done. '+ok+' audited'+(nc?' ('+nc+' with no contact details were saved under No contact)':'')+(failed.length?', '+failed.length+' failed. Tap Retry failed to try those again.':'.')+' Open the audited ones from the Leads table below.';
   $('err').textContent=fail.join('\n');$('bulkGo').disabled=false;
   $('bulkRetry').hidden=!failed.length;$('bulkRetry').textContent='Retry failed ('+failed.length+')';
+  chime(ok?'bulk':'error');
 }
 $('bulkGo').onclick=()=>{
   $('err').textContent='';store.set('pw',$('pw').value);store.set('services',$('services').value);
@@ -388,6 +415,31 @@ $('findMail').onclick=()=>window.open('https://www.google.com/search?q='+encodeU
 $('findSocial').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' instagram'),'_blank','noopener');
 
 function saveLead(l){store.set('leads',LEADS);call('/api/leads',{op:'save',lead:l}).catch(()=>toast('Could not sync. Saved on this device.'))}
+// Rewrite one draft from the points already verified. It does not load the store again.
+const RW={email:{btn:'rwEmail',undo:'undoEmail',msg:'rwMsgEmail',label:'Rewrite email'},dm:{btn:'rwDm',undo:'undoDm',msg:'rwMsgDm',label:'Rewrite DM'},whatsapp:{btn:'rwWa',undo:'undoWa',msg:'rwMsgWa',label:'Rewrite WhatsApp'}};
+const OLD={};
+async function rewrite(kind){
+  if(!current)return;sync();const r=RW[kind];
+  store.set('pw',$('pw').value);
+  $(r.btn).disabled=true;$(r.btn).textContent='Rewriting...';$(r.msg).textContent='';
+  try{
+    const d=await call('/api/audit',{mode:'rewrite',kind,name:current.storeName||current.url,url:current.url,observations:current.observations,
+      current:{email:current.email,dm:current.dm,whatsapp:current.whatsapp},problems:kind==='email'?($('spamNote').dataset.issues||''):'',speed:current.speed,services:$('services').value,voice:$('voice').value});
+    OLD[kind]={subj:$('subj').value,body:$('body').value,dm:$('dm').value,wa:$('waMsg').value};
+    if(kind==='email'){if(!d.email||!d.email.body)throw new Error('The rewrite came back empty. Try again.');$('subj').value=d.email.subject||$('subj').value;$('body').value=d.email.body}
+    else if(kind==='dm'){if(!d.dm)throw new Error('The rewrite came back empty. Try again.');$('dm').value=d.dm}
+    else{if(!d.whatsapp)throw new Error('The rewrite came back empty. Try again.');$('waMsg').value=d.whatsapp}
+    sync();upsert(current);count();
+    $(r.undo).hidden=false;$(r.msg).textContent='Rewritten. Read it once more before you send. Tap Undo to bring the old one back.';
+  }catch(e){$(r.msg).textContent=e.message}
+  $(r.btn).disabled=false;$(r.btn).textContent=r.label;
+}
+Object.keys(RW).forEach(k=>{
+  $(RW[k].btn).onclick=()=>rewrite(k);
+  $(RW[k].undo).onclick=()=>{const o=OLD[k];if(!o)return;
+    if(k==='email'){$('subj').value=o.subj;$('body').value=o.body}else if(k==='dm')$('dm').value=o.dm;else $('waMsg').value=o.wa;
+    sync();upsert(current);count();$(RW[k].undo).hidden=true;$(RW[k].msg).textContent='Old version restored.'}
+});
 $('followBtn').onclick=async()=>{
   if(!current)return;
   sync();
