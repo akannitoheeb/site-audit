@@ -351,6 +351,65 @@ Speed test (Google PageSpeed, mobile): ${b.speed ? `score ${b.speed.score} of 10
     return res.status(200).json({ provider: out.provider, ...out.json });
   }
 
+  if (req.body?.mode === 'rewrite') {
+    // Rewrites ONE draft (email, DM or WhatsApp) from the points already verified. No page is loaded, so it is fast and cheap.
+    const b = req.body;
+    const kind = ['email', 'dm', 'whatsapp'].includes(b.kind) ? b.kind : 'email';
+    const obs = (Array.isArray(b.observations) ? b.observations : []).slice(0, 6).map((o) => ({ issue: o.issue, evidence: o.evidence || '' }));
+    if (!obs.length) return res.status(400).json({ error: 'There are no verified points to write from. Audit the store again.' });
+    const RULES = {
+      email: 'Write ONE email. Subject: 2 to 6 words, specific to this store, written the way a person would type it, no colons, no marketing verbs. Body: 45 to 75 words in two or three short paragraphs. Start with the one specific thing you noticed, then one plain sentence on why it matters to them, then ONE easy ask. No lists, no bold, no links, no exclamation marks, and no money, currency or percent signs. Close with "Kind regards," and "Toheeb". Do not add an unsubscribe line (the app adds it).',
+      dm: 'Write ONE Instagram or social DM. 45 to 70 words. Greet properly, name ONE specific thing you saw on this store, then ask one easy question or offer one quick helpful idea. No links, no emojis.',
+      whatsapp: 'Write ONE WhatsApp message. 60 to 90 words. The store does not know this number, so greet properly, then introduce yourself in one line ("This is Toheeb from ATM. I help online stores with email marketing and website design."). Name ONE specific thing you saw, make ONE ask, then add a courteous line saying they can simply tell you if they would rather not be messaged. Close with "Kind regards, Toheeb", then on a new line "Portfolio: toheebakanni.name.ng". No other links, no emojis.',
+    };
+    const SHAPE = { email: '{"email":{"subject":string,"body":string}}', dm: '{"dm":string}', whatsapp: '{"whatsapp":string}' };
+    const cur = kind === 'email' ? `${b.current?.email?.subject || ''}\n${b.current?.email?.body || ''}` : String(b.current?.[kind] || '');
+    const sys = `You rewrite outreach for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM).
+${TONE}
+${RULES[kind]}
+Rules:
+- Use ONLY the verified points given. Never add a new claim about the store, its products, prices, stock or design.
+- If a point is about a missing signup form or email capture, keep it as a question ("I could not find a way to join your email list. Did I miss one?") and never state that the store has none.
+- Make exactly ONE ask. Never use the word "free".
+- Write a clearly different version from the current draft: a different opening and different sentence shapes, but the same facts and the same offer.
+${b.voice ? 'Writing style: ' + String(b.voice).slice(0, 300) : ''}
+Return ONLY JSON in exactly this shape: ${SHAPE[kind]}`;
+    const wcount = (t) => String(t || '').trim().split(/\s+/).filter(Boolean).length;
+    const lint = (j) => {
+      const p = [];
+      const text = kind === 'email' ? `${j.email?.subject || ''} ${j.email?.body || ''}` : String(j[kind] || '');
+      const body = kind === 'email' ? j.email?.body : text;
+      if (!String(body || '').trim()) return ['the draft was empty'];
+      if (/[$€£%]/.test(text)) p.push('remove every money, currency and percent sign');
+      if (/https?:\/\/|www\./i.test(text)) p.push('remove links');
+      const bad = AVOID.split(', ').filter((w) => new RegExp('\\b' + w.replace(/[-]/g, '[- ]?') + '\\b', 'i').test(text));
+      if (bad.length) p.push('do not use these words: ' + bad.join(', '));
+      if (kind === 'email') {
+        if (text.includes('!')) p.push('remove exclamation marks');
+        if (wcount(j.email?.subject) > 6) p.push('shorten the subject to 6 words or fewer');
+        const n = wcount(body);
+        if (n < 40 || n > 80) p.push(`make the body 45 to 75 words (it is ${n} now)`);
+      } else if (kind === 'dm' && wcount(text) > 75) p.push('shorten to under 70 words');
+      else if (kind === 'whatsapp' && wcount(text) > 95) p.push('shorten to under 90 words');
+      return p;
+    };
+    const usr = `Store: ${b.name} (${b.url})
+My services: ${b.services || 'Email marketing strategy and WordPress web design'}
+Verified points: ${JSON.stringify(obs)}
+Speed test (mobile): ${b.speed ? `score ${b.speed.score} of 100, main content shows in ${b.speed.lcp}` : 'not run'}
+Current draft to replace:
+${cur.slice(0, 1500)}
+${b.problems ? 'Problems found in the current draft that the new one must NOT have: ' + String(b.problems).slice(0, 400) : ''}`;
+    let out = await askAI(sys, usr);
+    if (!out.ok) return res.status(502).json({ error: out.error });
+    let issues = lint(out.json);
+    if (issues.length) {
+      const again = await askAI(sys, usr + `\n\nYour last attempt had these problems. Fix all of them: ${issues.join('; ')}.`);
+      if (again.ok && lint(again.json).length <= issues.length) out = again;
+    }
+    return res.status(200).json({ provider: out.provider, kind, [kind]: out.json[kind] });
+  }
+
   const { url, email, social, services, voice } = req.body || {};
   let target;
   try {
