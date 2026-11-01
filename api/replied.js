@@ -3,10 +3,10 @@
 //  { items: [{ from, subject, text }] }    -> messages the Gmail script found; matching leads move to Replied
 //                                             (or to Dropped, and are blocked, when the reply says no thanks)
 //  { senders: ['a@b.com'] }                -> older script version, still works
-import { waitingLeads, leadEmails, matches, setStatus, suppress, FREE } from './_db.js';
+import { waitingLeads, leadEmails, matches, setStatus, suppress, addReply, FREE } from './_db.js';
 
 const IGNORE = /^(mailer-daemon|postmaster|no-?reply|do-?not-?reply|notifications?|bounces?)@/i;
-const AUTO = /out of office|auto-?reply|automatic reply|autoreply|away from (the )?office|on vacation|undeliverable|delivery status/i;
+const AUTO = /out of office|auto-?reply|automatic reply|autoreply|away from (the )?office|on vacation|undeliverable|delivery status|case number|ticket (id|number|#)|we'?ll (reply|get back to you)|thank you for (your email|contacting|reaching out)|your (request|message|email) has been received|we have received your/i;
 const OPT_OUT = /\b(no,? thanks?|no thank you|not interested|unsubscribe|stop (emailing|messaging|contacting|sending)|remove me|take me off|do not (email|contact|message)|don'?t (email|contact|message)|leave me alone)\b/i;
 
 // Keep only what the person wrote, not the quoted copy of your own email (it contains your "no thanks" line)
@@ -18,7 +18,7 @@ function written(text) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (req.headers['x-app-password'] !== process.env.APP_PASSWORD) return res.status(401).json({ error: 'Wrong password' });
+  if ((!process.env.APP_PASSWORD || req.headers['x-app-password'] !== process.env.APP_PASSWORD)) return res.status(401).json({ error: 'Wrong password' });
   try {
     const waiting = await waitingLeads();
     if (req.body?.op === 'targets') {
@@ -41,7 +41,11 @@ export default async function handler(req, res) {
           await setStatus(l.url, 'Dropped');
           for (const e of new Set([from, ...leadEmails(l)])) await suppress(e, 'asked_to_stop');
           dropped.push(l.name || l.url);
-        } else { await setStatus(l.url, 'Replied'); replied.push(l.name || l.url); }
+          await addReply({ channel: 'email', from_name: l.name || from, lead_url: l.url, subject: it.subject, message: written(it.text) });
+        } else {
+          await setStatus(l.url, 'Replied'); replied.push(l.name || l.url);
+          await addReply({ channel: 'email', from_name: l.name || from, lead_url: l.url, subject: it.subject, message: written(it.text) });
+        }
       }
     }
     return res.status(200).json({ ok: true, replied, dropped });

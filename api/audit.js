@@ -77,8 +77,15 @@ function contactPaths(html, target) {
     } catch {}
     if (out.length >= 2) break;
   }
-  for (const p of ['/pages/contact', '/contact', '/pages/contact-us', '/contact-us']) if (!out.includes(p)) out.push(p);
-  return out.slice(0, 4);
+  for (const m of html.matchAll(/<a\b[^>]*?href=["']([^"'#\s]+)["'][^>]*>\s*([^<]{2,40}?)\s*</gi)) { // links whose visible text says contact
+    if (!/contact|get in touch|reach us|talk to us|write to us/i.test(m[2]) || /^(mailto|tel|javascript|sms|whatsapp):/i.test(m[1])) continue;
+    try {
+      const u = new URL(m[1], target);
+      if (u.hostname.replace(/^www\./, '') === target.hostname.replace(/^www\./, '') && !out.includes(u.pathname)) out.push(u.pathname);
+    } catch {}
+  }
+  for (const p of ['/pages/contact', '/contact', '/pages/contact-us', '/contact-us', '/pages/get-in-touch', '/about']) if (!out.includes(p)) out.push(p);
+  return out.slice(0, 6);
 }
 
 // Finds every phone number on the page, best sources first, in any country format
@@ -124,6 +131,8 @@ function signals(html) {
     emailToolDetected: has('klaviyo', 'mailchimp', 'omnisend', 'mailerlite', 'sendinblue', 'brevo', 'convertkit'),
     newsletterOrSubscribeText: has('newsletter', 'subscribe', 'join our list'),
     emailSignupFormDetected: /<input[^>]+type=["']email["']/i.test(html) || has('contact[email]', 'klaviyo-form', 'needsclick', 'mc-embedded-subscribe'),
+    runsAds: has('connect.facebook.net/en_us/fbevents', 'fbq(', 'googleadservices', 'gtag/js?id=aw-', 'analytics.tiktok'),
+    looksLikeStore: has('add to cart', 'add-to-cart', '/cart', '/products/', 'woocommerce', 'cdn.shopify.com'),
     pageSizeKB: Math.round(html.length / 1024),
   };
 }
@@ -183,6 +192,21 @@ function findContacts(html, host) {
   return out;
 }
 
+// Undoes the tricks stores use to hide an email address from robots
+function deobfuscate(html) {
+  const dec = (hex) => {
+    const k = parseInt(hex.slice(0, 2), 16); let s = '';
+    for (let i = 2; i < hex.length; i += 2) s += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16) ^ k);
+    return s;
+  };
+  return html
+    .replace(/data-cfemail="([0-9a-f]+)"/gi, (_, h) => ` ${dec(h)} `)
+    .replace(/email-protection#([0-9a-f]+)/gi, (_, h) => `mailto:${dec(h)} `)
+    .replace(/&#0*64;|&#x0*40;|&commat;/gi, '@')
+    .replace(/\s*[\[\(\{]\s*at\s*[\]\)\}]\s*/gi, '@')
+    .replace(/\s*[\[\(\{]\s*dot\s*[\]\)\}]\s*/gi, '.');
+}
+
 async function postRetry(url, opts, tries = 2) {
   let r;
   for (let i = 0; i < tries; i++) {
@@ -225,7 +249,7 @@ async function askGemini(system, user, key) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.4, ...(process.env.GEMINI_THINKING_BUDGET ? { thinkingConfig: { thinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET) } } : {}) },
       }),
     });
     const d = await r.json().catch(() => ({}));
@@ -294,7 +318,7 @@ async function checkProduct(pu) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (req.headers['x-app-password'] !== process.env.APP_PASSWORD)
+  if ((!process.env.APP_PASSWORD || req.headers['x-app-password'] !== process.env.APP_PASSWORD))
     return res.status(401).json({ error: 'Wrong password' });
     
 
@@ -419,9 +443,10 @@ ${b.problems ? 'Problems found in the current draft that the new one must NOT ha
     return res.status(400).json({ error: 'Enter a valid store URL starting with https://' });
   }
 
+  const T0 = Date.now();
   let html, status;
   try {
-    const r = await fetch(target, { headers: UA, signal: AbortSignal.timeout(12000) });
+    const r = await fetch(target, { headers: UA, signal: AbortSignal.timeout(9000) });
     status = r.status;
     html = await r.text();
   } catch {
@@ -431,32 +456,31 @@ ${b.problems ? 'Problems found in the current draft that the new one must NOT ha
   if (challenged || status === 403 || status === 429)
     return res.status(422).json({ error: 'This store blocks automated readers (it returned a bot-check page), so it cannot be audited here. Review it by hand or try another store.' });
 
-  // Look for contact details on the store's own public pages (homepage plus contact pages)
+  // Contact pages and the product page load at the same time, not one after the other
   const paths = contactPaths(html, target);
-  const pages = await Promise.allSettled(paths.map(async (p) => {
-    const u = new URL(p, target);
-    const rr = await fetch(u, { headers: UA, signal: AbortSignal.timeout(6000) });
-    return rr.ok ? await rr.text() : '';
-  }));
+  const pm = html.match(/href=["']([^"']*\/products?\/[^"'#?]+)["']/i);
+  const [pages, prod] = await Promise.all([
+    Promise.allSettled(paths.map(async (p) => {
+      const rr = await fetch(new URL(p, target), { headers: UA, signal: AbortSignal.timeout(5000) });
+      return rr.ok ? await rr.text() : '';
+    })),
+    (async () => {
+      const none = { productText: '', stock: 'not checked', facts: null };
+      if (!pm) return none;
+      try {
+        const pu = new URL(pm[1], target);
+        if (pu.hostname !== target.hostname) return none;
+        const [pr, chk] = await Promise.all([fetch(pu, { headers: UA, signal: AbortSignal.timeout(6000) }).catch(() => null), checkProduct(pu)]);
+        return { productText: pr && pr.ok ? toText(await pr.text()).slice(0, 2500) : '', stock: chk.stock, facts: chk.facts };
+      } catch { return none; }
+    })(),
+  ]);
   const extra = pages.map((x) => (x.status === 'fulfilled' ? x.value : '')).join(' ');
-  const found = findContacts(html + ' ' + extra, target.hostname);
-
+  const found = findContacts(deobfuscate(html + ' ' + extra), target.hostname);
   const platform = detect(html);
   const sig = signals(html);
   const text = toText(html);
-  
-  let productText = '', stock = 'not checked', facts = null;
-  const pm = html.match(/href=["']([^"']*\/products?\/[^"'#?]+)["']/i);
-  if (pm) {
-    try {
-      const pu = new URL(pm[1], target);
-      if (pu.hostname === target.hostname) {
-        const pr = await fetch(pu, { headers: UA, signal: AbortSignal.timeout(8000) });
-        if (pr.ok) productText = toText(await pr.text()).slice(0, 2500);
-        const prod = await checkProduct(pu); stock = prod.stock; facts = prod.facts;
-      }
-    } catch {}
-  }
+  const { productText, stock, facts } = prod;
 
   const system = `You write outreach for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM, Akanni Toheeb Marketing).
 You audit an online store from the evidence given and draft personal outreach.
@@ -542,5 +566,5 @@ Product facts (from the store's own data): ${facts ? JSON.stringify(facts) : 'no
     }
   }
   const observations = v.kept.length ? v.kept : (gen.json.observations || []).map((o) => ({ issue: o.issue, evidence: o.evidence || '', check: 'unchecked' }));
-  return res.status(200).json({ platform, signals: sig, found, provider: gen.provider, ...gen.json, observations, productFacts: facts, verification: { removed, redrafted } });
+  return res.status(200).json({ platform, signals: sig, found, provider: gen.provider, ...gen.json, observations, productFacts: facts, verification: { removed, redrafted }, contactPaths: paths, ms: Date.now() - T0 });
 }

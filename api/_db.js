@@ -65,3 +65,35 @@ export async function setStatus(url, status) {
   });
   return r.ok;
 }
+
+// ---- sending cap that grows as the sending domain ages ----
+const ms = (x) => (x == null ? 0 : /^\d+$/.test(String(x)) ? Number(x) : Date.parse(x) || 0);
+export async function sentLast24h() {
+  const D = db(); if (!D) return 0;
+  try {
+    const r = await fetch(`${D.leads}?select=emailed&emailed=not.is.null&order=emailed.desc&limit=300`, { headers: D.h });
+    if (!r.ok) return 0;
+    const since = Date.now() - 864e5;
+    return (await r.json()).filter((l) => ms(l.emailed) >= since).length;
+  } catch { return 0; }
+}
+// SENDING_START = the date you began sending real emails from the new domain (YYYY-MM-DD). DAILY_MAX = the ceiling after week 6.
+export function dailyCap() {
+  const max = Number(process.env.DAILY_MAX) || 60;
+  const start = Date.parse(process.env.SENDING_START || '');
+  if (!start) return Math.min(10, max);
+  const wk = Math.max(0, Math.floor((Date.now() - start) / (7 * 864e5)));
+  return wk >= 6 ? max : Math.min([10, 15, 20, 30, 40, 50][wk], max);
+}
+
+// ---- replies shown under the bell ----
+export async function addReply(r) {
+  const D = db(); if (!D) return false;
+  try {
+    const x = await fetch(`${D.rest}/replies?on_conflict=ext_id`, {
+      method: 'POST', headers: { ...D.h, prefer: 'resolution=ignore-duplicates,return=minimal' },
+      body: JSON.stringify({ channel: r.channel || 'other', from_name: r.from_name || '', lead_url: r.lead_url || null, subject: r.subject || '', message: String(r.message || '').slice(0, 2000), ext_id: r.ext_id || null }),
+    });
+    return x.ok;
+  } catch { return false; }
+}

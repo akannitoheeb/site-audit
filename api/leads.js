@@ -3,7 +3,7 @@
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (req.headers['x-app-password'] !== process.env.APP_PASSWORD)
+  if ((!process.env.APP_PASSWORD || req.headers['x-app-password'] !== process.env.APP_PASSWORD))
     return res.status(401).json({ error: 'Wrong password' });
 
   const KEY = process.env.SUPABASE_SERVICE_KEY || '';
