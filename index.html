@@ -72,6 +72,8 @@ td.acts{white-space:nowrap}td.acts button{padding:6px 12px;margin-right:6px}
 .toast.show{opacity:1}
 button.ghost.on{background:var(--ink);color:var(--card);border-color:var(--ink)}
 .nc{padding:12px 0;border-bottom:1px solid var(--line)}.nc:last-child{border-bottom:0}.nc b{display:block;word-break:break-word}
+.bell{position:relative;padding:6px 12px!important}.bell b{position:absolute;top:-7px;right:-7px;background:var(--coral);color:#fff;border-radius:99px;font-size:.7rem;min-width:18px;height:18px;line-height:18px;padding:0 5px;text-align:center}
+.inb .it{padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}.inb .it.new b::before{content:'\25CF';color:var(--coral);margin-right:6px}.inb .it p{margin:4px 0 0;color:var(--mute);font-size:.9rem;white-space:pre-wrap;word-break:break-word}.inb .it p.clip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 [hidden]{display:none!important}
 .sc{display:inline-block;padding:2px 9px;border-radius:99px;font-size:.78rem;font-weight:800;white-space:nowrap}
 .sc.hot{background:var(--okbg);color:var(--oktx)}.sc.warm{background:#fff0c9;color:#7a5200}.sc.cold{background:var(--chip);color:var(--mute)}
@@ -85,7 +87,7 @@ tr.grp td{font-weight:800;background:var(--chip)}
 </head>
 <body>
 <header><div class="wrap">
-  <div class="top"><b>ATM OUTREACH</b><div style="display:flex;gap:8px"><button id="snd" type="button" aria-pressed="true">Sound: On</button><button id="theme" type="button">Dark mode</button></div></div>
+  <div class="top"><b>ATM OUTREACH</b><div style="display:flex;gap:8px"><button id="bell" class="bell" type="button" aria-label="Replies">🔔<b id="bellN" hidden>0</b></button><button id="snd" type="button" aria-pressed="true">Sound: On</button><button id="theme" type="button">Dark mode</button></div></div>
   <h1>Find the gap.<br><mark>Send the pitch.</mark></h1>
   <p>Paste a store, get an honest audit and two personal drafts. You review. You send.</p>
 </div></header>
@@ -97,6 +99,16 @@ tr.grp td{font-weight:800;background:var(--chip)}
     <a class="stat" href="all-leads.html?f=today"><b id="sSent">0/100</b><span>Emails sent today</span></a>
     <a class="stat due" href="all-leads.html?f=due"><b id="sDue">0</b><span>Follow-ups due</span></a>
   </div>
+  <section class="card inb" id="inbox" hidden>
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h2>Replies <span id="inbCount" style="font-weight:400;opacity:.7"></span></h2><div class="actions" style="margin:0"><button class="ghost" id="inbRead" type="button" style="padding:6px 12px">Mark all read</button><button class="ghost" id="inbClose" type="button" style="padding:6px 12px">Close</button></div></div>
+    <div id="inbList"></div>
+    <details><summary>Log a reply (WhatsApp, Instagram, anything)</summary>
+      <label for="lgCh">Where did it come from?</label><select id="lgCh"><option value="instagram">Instagram</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="other">Other</option></select>
+      <label for="lgWho">Store name</label><input id="lgWho" placeholder="Start typing the store name">
+      <label for="lgMsg">What they said</label><textarea id="lgMsg" style="min-height:80px"></textarea>
+      <div class="actions"><button id="lgSave" type="button">Save reply</button></div>
+    </details>
+  </section>
   <ol class="steps" id="steps" aria-label="Progress"><li class="on">Add store</li><li>Audit</li><li>Review drafts</li><li>Send</li></ol>
 
   <section class="card">
@@ -218,7 +230,7 @@ tr.grp td{font-weight:800;background:var(--chip)}
 <div class="toast" id="toast" role="status"></div>
 
 <script>
-const $=i=>document.getElementById(i),CAP=100,DAY=864e5;
+let CAP=100;const $=i=>document.getElementById(i),DAY=864e5;
 let current=null;
 let LEADS=[],ncAll=false;
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
@@ -388,28 +400,30 @@ $('bulkGo').onclick=()=>{
 };
 $('bulkRetry').onclick=()=>{store.set('pw',$('pw').value);runBulk(failedUrls.slice())};
 
+const tag=(c,k)=>{c.channels=[...new Set([...(c.channels||[]),k])]};
 const sentToday=()=>LEADS.filter(l=>l.emailed&&new Date(l.emailed).toDateString()===new Date().toDateString()).length;
 $('send').onclick=async()=>{
   sync();
   if(!current.to){$('sendMsg').textContent='Type or paste their email in the Send to box first.';$('email').focus();return}
   if(sentToday()>=CAP){$('sendMsg').textContent='Daily limit reached. Try again tomorrow.';return}
+  const sp=$('spamNote').dataset.issues;if(sp&&!confirm('Spam check found: '+sp+'.\n\nSend anyway?'))return;
   if(!confirm('Send this email to '+current.to+'?'))return;
   $('send').disabled=true;
   try{await call('/api/send',{to:current.to,subject:current.email.subject,body:current.email.body,withLink:(current.followups||0)>0});
-    setStep(4);toast('Email sent');upsert(current,'Contacted',true)}
+    setStep(4);toast('Email sent');tag(current,'email');upsert(current,'Contacted',true)}
   catch(e){$('sendMsg').textContent=e.message}
   gate();
 };
 $('copyMail').onclick=()=>{navigator.clipboard.writeText($('subj').value+'\n\n'+$('body').value);toast('Email copied')};
 $('copyDm').onclick=()=>{navigator.clipboard.writeText($('dm').value);toast('DM copied')};
 $('openSocial').onclick=()=>{const u=$('social').value.trim();u?window.open(norm(u),'_blank','noopener'):toast('Paste their profile link first')};
-$('markDm').onclick=()=>{sync();upsert(current,'Contacted');toast('Marked as contacted')};
+$('markDm').onclick=()=>{sync();tag(current,'dm');upsert(current,'Contacted');toast('Marked as contacted')};
 const waNum=()=>{let d=$('wa').value.replace(/\D/g,'');if(/^0[789][01]\d{8}$/.test(d))d='234'+d.slice(1);return d};
 $('openWa').onclick=()=>{const n=waNum();if(n.length<10){toast('Add their WhatsApp number first');return}
   window.open('https://wa.me/'+n+'?text='+encodeURIComponent($('waMsg').value),'_blank','noopener')};
 $('callBtn').onclick=()=>{const n=waNum();if(n.length<8){toast('Add or pick a number first');return}location.href='tel:+'+n};
 $('copyWa').onclick=()=>{navigator.clipboard.writeText($('waMsg').value);toast('WhatsApp message copied')};
-$('markWa').onclick=()=>{sync();upsert(current,'Contacted');toast('Marked as contacted')};
+$('markWa').onclick=()=>{sync();tag(current,'whatsapp');upsert(current,'Contacted');toast('Marked as contacted')};
 const name=()=>current.storeName||current.url;
 $('findMail').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' contact email'),'_blank','noopener');
 $('findSocial').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' instagram'),'_blank','noopener');
@@ -480,6 +494,8 @@ function score(l){const d=l.data||{},f=d.found||{},s=d.signals||{};let n=0;
   if(/shopify|woocommerce/i.test(d.platform||''))n++;
   if((d.observations||[]).length>=3)n++;
   if(d.speed&&d.speed.score<50)n++;
+  if(s.runsAds)n+=2;
+  if(s.looksLikeStore===false)n=Math.max(0,n-3);
   return Math.min(10,n)}
 const scoreLabel=n=>n>=7?'hot':n>=4?'warm':'cold';
 function scoreBadge(l){const n=score(l),b=document.createElement('span');b.className='sc '+scoreLabel(n);b.textContent=n+' '+scoreLabel(n);b.title='Priority out of 10. A reachable owner email, a phone or Instagram, no email tool, no signup form and a solid audit all raise it.';return b}
@@ -503,6 +519,7 @@ function renderStats(){
     Object.entries(m).sort((a,b)=>b[1].length-a[1].length).slice(0,8).forEach(([k,ls])=>{const r=ls.filter(isReplied).length,w=ls.filter(l=>l.status==='Won').length;
       const tr=document.createElement('tr');[k,ls.length,r,w,pct(r,ls.length)].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.appendChild(td)});body.appendChild(tr)})};
   group('By angle of the pitch',l=>(l.data&&l.data.angle)||'not tagged (older audit)');
+  group('By channel',l=>((l.data&&l.data.channels)||[]).join(' + ')||'not tagged');
   group('By platform',l=>(l.data&&l.data.platform)||'unknown');
   group('By region',region);
   $('resNote').textContent=C.length<30?'Too few contacts so far to trust these numbers. Come back after about 30 to 50 emails.':'';
@@ -634,8 +651,47 @@ function renderNC(ncs){
   $('ncMore').hidden=ncs.length<=5;$('ncMore').textContent=ncAll?'Show fewer':'Show all '+ncs.length;$('ncMore').onclick=()=>{ncAll=!ncAll;render()};
 }
 function openFromUrl(){const u=new URLSearchParams(location.search).get('open');if(!u)return;const l=LEADS.find(x=>x.url===u);if(l&&l.data){history.replaceState(null,'',location.pathname);show(l.data)}}
-LEADS=store.get('leads',[]);render();openFromUrl();loadLeads();
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)loadLeads()});
+/* ---------- replies bell ---------- */
+let INB=[],lastUnread=-1;const CH={email:'Email',instagram:'Instagram',whatsapp:'WhatsApp',other:'Other'};
+function drawBell(n){$('bellN').hidden=!n;$('bellN').textContent=n>99?'99+':n;document.title=(n?'('+n+') ':'')+'ATM Outreach'}
+async function loadInbox(){
+  if(!$('pw').value)return;
+  try{const d=await call('/api/inbox',{op:'list'});INB=d.rows||[];
+    if(lastUnread>=0&&d.unread>lastUnread){chime('single');toast('New reply')}
+    lastUnread=d.unread;drawBell(d.unread);if(!$('inbox').hidden)drawInbox()}catch{}
+}
+function drawInbox(){
+  const box=$('inbList');box.innerHTML='';$('inbCount').textContent=INB.length?'('+INB.filter(x=>!x.seen).length+' new)':'';
+  if(!INB.length){box.innerHTML='<p class="hint">No replies yet. Email replies show up after your Gmail script runs. Instagram replies show up once the webhook is connected. Log any other reply by hand below.</p>';return}
+  INB.forEach(r=>{
+    const it=document.createElement('div');it.className='it'+(r.seen?'':' new');
+    const t=document.createElement('b');t.style.display='inline';t.textContent=(r.from_name||'Someone')+' \u00b7 '+(CH[r.channel]||r.channel);
+    const sm=document.createElement('span');sm.className='hint';sm.style.marginLeft='8px';sm.textContent=ago(Date.parse(r.created_at));
+    const p=document.createElement('p');p.className='clip';p.textContent=(r.subject?r.subject+'\n':'')+(r.message||'');
+    it.append(t,sm,p);
+    it.onclick=()=>{
+      p.classList.toggle('clip');
+      if(!r.seen){r.seen=true;it.classList.remove('new');call('/api/inbox',{op:'read',ids:[r.id]}).then(loadInbox).catch(()=>{})}
+      const l=LEADS.find(x=>x.url===r.lead_url);
+      if(l&&l.data&&!it.querySelector('button')){const b=document.createElement('button');b.className='ghost';b.style.cssText='padding:6px 12px;margin-top:8px';b.textContent='Open lead';b.onclick=e=>{e.stopPropagation();$('inbox').hidden=true;show(l.data)};it.appendChild(b)}
+    };
+    box.appendChild(it)});
+}
+$('bell').onclick=()=>{$('inbox').hidden=!$('inbox').hidden;if(!$('inbox').hidden){drawInbox();$('inbox').scrollIntoView({behavior:'smooth'})}};
+$('inbClose').onclick=()=>{$('inbox').hidden=true};
+$('inbRead').onclick=async()=>{try{await call('/api/inbox',{op:'read'});await loadInbox()}catch(e){toast(e.message)}};
+$('lgSave').onclick=async()=>{
+  const who=$('lgWho').value.trim(),msg=$('lgMsg').value.trim();if(!who||!msg){toast('Add the store and what they said');return}
+  const q=who.toLowerCase(),l=LEADS.find(x=>(x.name||'').toLowerCase().includes(q)||x.url.toLowerCase().includes(q));
+  try{await call('/api/inbox',{op:'add',reply:{channel:$('lgCh').value,from_name:l?l.name:who,lead_url:l?l.url:null,message:msg}});
+    if(l&&(l.status==='New'||l.status==='Contacted')){l.status='Replied';l.follow=null;saveLead(l);render()}
+    $('lgWho').value='';$('lgMsg').value='';toast(l?'Saved. '+l.name+' marked Replied':'Saved');loadInbox()}
+  catch(e){toast(e.message)}
+};
+async function loadCap(){if(!$('pw').value)return;try{const d=await call('/api/send',{op:'cap'});CAP=d.cap;render()}catch{}}
+setInterval(()=>{if(!document.hidden)loadInbox()},60000);
+LEADS=store.get('leads',[]);render();openFromUrl();loadLeads();loadInbox();loadCap();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){loadLeads();loadInbox()}});
 $('pw').addEventListener('change',()=>{store.set('pw',$('pw').value);loadLeads()});
 function prefillFromUrl(){
   const u=new URLSearchParams(location.search).get('url');

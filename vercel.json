@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/audit.js": { "maxDuration": 60 },
+    "api/speed.js": { "maxDuration": 60 }
+  }
+}
