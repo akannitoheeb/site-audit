@@ -209,8 +209,9 @@ function deobfuscate(html) {
 
 async function postRetry(url, opts, tries = 2) {
   let r;
+  const ms = url.includes('groq.com') ? 15000 : 22000; // a stuck AI call must give up so the backup provider can run
   for (let i = 0; i < tries; i++) {
-    r = await fetch(url, opts);
+    r = await fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
     if (![429, 500, 502, 503, 504].includes(r.status)) return r;
     await new Promise((x) => setTimeout(x, 2000 * (i + 1)));
   }
@@ -557,7 +558,7 @@ Product facts (from the store's own data): ${facts ? JSON.stringify(facts) : 'no
   const corpus = text + ' ' + productText;
   let v = verifyObs(gen.json.observations, corpus), redrafted = false;
   const removed = v.dropped;
-  if (removed > 0 && v.kept.length) {
+  if (removed > 0 && v.kept.length && Date.now() - T0 < 35000) {
     // Some points could not be matched to the page. Rewrite the drafts using only the points that could.
     const again = await generate(`\n\nIMPORTANT: ${removed} earlier point(s) were removed because their quotes were not found on the page. Write ALL drafts using ONLY these verified points and mention nothing else about the store:\n${JSON.stringify(v.kept.map((k) => ({ issue: k.issue, evidence: k.evidence })))}`);
     if (again.ok) {
