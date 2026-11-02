@@ -96,7 +96,7 @@ tr.grp td{font-weight:800;background:var(--chip)}
   <div class="stats">
     <a class="stat" href="all-leads.html"><b id="sTotal">0</b><span>Stores audited</span></a>
     <a class="stat" href="all-leads.html?f=Contacted"><b id="sContacted">0</b><span>Contacted</span></a>
-    <a class="stat" href="all-leads.html?f=today"><b id="sSent">0/100</b><span>Emails sent today</span></a>
+    <a class="stat" href="all-leads.html?f=today"><b id="sSent">0/100</b><span id="sSentLbl">Emails (24h)</span></a>
     <a class="stat due" href="all-leads.html?f=due"><b id="sDue">0</b><span>Follow-ups due</span></a>
   </div>
   <section class="card inb" id="inbox" hidden>
@@ -134,6 +134,7 @@ tr.grp td{font-weight:800;background:var(--chip)}
       <textarea id="services" style="min-height:90px">Email marketing strategy: welcome flows, abandoned cart emails, campaigns. WordPress web design and store improvements.</textarea>
       <label for="voice">My writing style (optional)</label>
       <textarea id="voice" style="min-height:70px" placeholder="Example: short sentences, friendly, simple English, no exclamation marks"></textarea>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px"><input type="checkbox" id="localize" checked style="width:auto"> Write drafts in the store's language when it isn't English</label>
     </details>
   </section>
 
@@ -168,6 +169,8 @@ tr.grp td{font-weight:800;background:var(--chip)}
         <div class="actions" style="margin-top:8px"><button class="ghost" id="findMail" type="button">Search for their email</button></div>
         <label for="subj">Subject</label><input id="subj">
         <label for="body">Message</label><textarea id="body"></textarea>
+        <div class="hint" id="langNote" hidden></div>
+        <details id="enBox" hidden><summary>English meaning (check it before you send)</summary><p id="enText" style="white-space:pre-wrap;margin-top:8px"></p></details>
         <div class="count" id="bodyCount"></div>
         <div class="hint" id="spamNote" style="margin-top:6px"></div>
         <div class="actions"><button id="send">Send email</button><button class="ghost" id="copyMail">Copy</button><button class="ghost" id="rwEmail" type="button">Rewrite email</button><button class="ghost" id="undoEmail" type="button" hidden>Undo</button></div>
@@ -289,13 +292,20 @@ async function call(path,payload){
 }
 async function runAudit(url){
   url=norm(url.trim());
-  const d=await call('/api/audit',{url,services:$('services').value,voice:$('voice').value});
+  const d=await call('/api/audit',{url,services:$('services').value,voice:$('voice').value,localize:$('localize').checked});
   const f=d.found||{};
   // phone = the WhatsApp field. Only a number the site itself publishes as WhatsApp fills it. Other phone lines stay as tap-to-try chips.
   return {...d,url,auditedAt:Date.now(),to:f.email||'',phone:f.waNumber||'',profile:f.instagram||f.facebook||f.linkedin||f.tiktok||f.x||''};
 }
 
 const chip=(t,c)=>{const s=document.createElement('span');s.className='chip '+c;s.textContent=t;$('chips').appendChild(s)};
+function showLang(c){
+  const L=c.lang||{},en=c.englishEmail,off=!L.code||L.code==='en';
+  $('langNote').hidden=off;
+  $('langNote').textContent=off?'':(L.localized?'This store is in '+L.name+'. Your drafts are written in '+L.name+'.':'This store looks '+L.name+'-language, but your drafts are in English.');
+  $('enBox').hidden=!(L.localized&&en&&en.body);
+  $('enText').textContent=en&&en.body?((en.subject?en.subject+'\n\n':'')+en.body):'';
+}
 function show(c){
   current=c;const f=c.found||{},s=c.signals||{};
   $('storeName').textContent=c.storeName||c.url;
@@ -319,8 +329,8 @@ function show(c){
   $('prevList').innerHTML='';const pv=c.prevObservations||[];$('prevObs').hidden=!pv.length;
   pv.forEach(o=>{const li=document.createElement('li');li.textContent=o.issue;const sm=document.createElement('small');sm.textContent=o.evidence;li.appendChild(sm);$('prevList').appendChild(li)});
   $('email').value=c.to||'';mailPick(f.emails||[]);$('verified').checked=false;gate();$('social').value=c.profile||'';socialPick(f);
-  $('subj').value=c.email?.subject||'';$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';Object.values(RW).forEach(r=>{$(r.undo).hidden=true;$(r.msg).textContent=''});$('notes').value=c.notes||'';$('theirReply').value='';$('replyMsg').textContent='';drawSpeed(c.speed);
-  count();$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
+  $('subj').value=cap1(c.email?.subject);$('body').value=c.email?.body||'';$('dm').value=c.dm||'';$('wa').value=c.phone?('+'+String(c.phone).replace(/^\+/,'')):'';waPick(f.phones||[]);$('waMsg').value=c.whatsapp||'';$('sendMsg').textContent='';$('followMsg').textContent='';Object.values(RW).forEach(r=>{$(r.undo).hidden=true;$(r.msg).textContent=''});$('notes').value=c.notes||'';$('theirReply').value='';$('replyMsg').textContent='';drawSpeed(c.speed);
+  count();showLang(c);$('result').hidden=false;setStep(2);$('result').scrollIntoView({behavior:'smooth'});
 }
 function sync(){
   current.to=$('email').value.trim();current.profile=$('social').value.trim();
@@ -400,16 +410,20 @@ $('bulkGo').onclick=()=>{
 };
 $('bulkRetry').onclick=()=>{store.set('pw',$('pw').value);runBulk(failedUrls.slice())};
 
+const cap1=s=>String(s||'').replace(/^\s*\p{L}/u,c=>c.toUpperCase());
+const isToday=t=>t&&new Date(t).toDateString()===new Date().toDateString();
 const tag=(c,k)=>{c.channels=[...new Set([...(c.channels||[]),k])]};
-const sentToday=()=>LEADS.filter(l=>l.emailed&&new Date(l.emailed).toDateString()===new Date().toDateString()).length;
+let USED=null;const sentToday=()=>USED!==null?USED:LEADS.filter(l=>isToday(l.emailed)).length;
 $('send').onclick=async()=>{
+  $('subj').value=cap1($('subj').value);
   sync();
   if(!current.to){$('sendMsg').textContent='Type or paste their email in the Send to box first.';$('email').focus();return}
   if(sentToday()>=CAP){$('sendMsg').textContent='Daily limit reached. Try again tomorrow.';return}
   const sp=$('spamNote').dataset.issues;if(sp&&!confirm('Spam check found: '+sp+'.\n\nSend anyway?'))return;
   if(!confirm('Send this email to '+current.to+'?'))return;
   $('send').disabled=true;
-  try{await call('/api/send',{to:current.to,subject:current.email.subject,body:current.email.body,withLink:(current.followups||0)>0});
+  try{const r=await call('/api/send',{to:current.to,subject:current.email.subject,body:current.email.body,withLink:(current.followups||0)>0});
+    if(r&&typeof r.used==='number')USED=r.used;else if(USED!==null)USED++;
     setStep(4);toast('Email sent');tag(current,'email');upsert(current,'Contacted',true)}
   catch(e){$('sendMsg').textContent=e.message}
   gate();
@@ -417,13 +431,13 @@ $('send').onclick=async()=>{
 $('copyMail').onclick=()=>{navigator.clipboard.writeText($('subj').value+'\n\n'+$('body').value);toast('Email copied')};
 $('copyDm').onclick=()=>{navigator.clipboard.writeText($('dm').value);toast('DM copied')};
 $('openSocial').onclick=()=>{const u=$('social').value.trim();u?window.open(norm(u),'_blank','noopener'):toast('Paste their profile link first')};
-$('markDm').onclick=()=>{sync();tag(current,'dm');upsert(current,'Contacted');toast('Marked as contacted')};
+$('markDm').onclick=()=>{sync();tag(current,'dm');current.dmAt=Date.now();upsert(current,'Contacted');setStep(4);toast('DM recorded as sent')};
 const waNum=()=>{let d=$('wa').value.replace(/\D/g,'');if(/^0[789][01]\d{8}$/.test(d))d='234'+d.slice(1);return d};
 $('openWa').onclick=()=>{const n=waNum();if(n.length<10){toast('Add their WhatsApp number first');return}
   window.open('https://wa.me/'+n+'?text='+encodeURIComponent($('waMsg').value),'_blank','noopener')};
 $('callBtn').onclick=()=>{const n=waNum();if(n.length<8){toast('Add or pick a number first');return}location.href='tel:+'+n};
 $('copyWa').onclick=()=>{navigator.clipboard.writeText($('waMsg').value);toast('WhatsApp message copied')};
-$('markWa').onclick=()=>{sync();tag(current,'whatsapp');upsert(current,'Contacted');toast('Marked as contacted')};
+$('markWa').onclick=()=>{sync();tag(current,'whatsapp');current.waAt=Date.now();upsert(current,'Contacted');setStep(4);toast('WhatsApp recorded as sent')};
 const name=()=>current.storeName||current.url;
 $('findMail').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' contact email'),'_blank','noopener');
 $('findSocial').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent(name()+' instagram'),'_blank','noopener');
@@ -438,7 +452,7 @@ async function rewrite(kind){
   $(r.btn).disabled=true;$(r.btn).textContent='Rewriting...';$(r.msg).textContent='';
   try{
     const d=await call('/api/audit',{mode:'rewrite',kind,name:current.storeName||current.url,url:current.url,observations:current.observations,
-      current:{email:current.email,dm:current.dm,whatsapp:current.whatsapp},problems:kind==='email'?($('spamNote').dataset.issues||''):'',speed:current.speed,services:$('services').value,voice:$('voice').value});
+      current:{email:current.email,dm:current.dm,whatsapp:current.whatsapp},problems:kind==='email'?($('spamNote').dataset.issues||''):'',speed:current.speed,services:$('services').value,voice:$('voice').value,localize:$('localize').checked});
     OLD[kind]={subj:$('subj').value,body:$('body').value,dm:$('dm').value,wa:$('waMsg').value};
     if(kind==='email'){if(!d.email||!d.email.body)throw new Error('The rewrite came back empty. Try again.');$('subj').value=d.email.subject||$('subj').value;$('body').value=d.email.body}
     else if(kind==='dm'){if(!d.dm)throw new Error('The rewrite came back empty. Try again.');$('dm').value=d.dm}
@@ -463,7 +477,7 @@ $('followBtn').onclick=async()=>{
   try{
     const d=await call('/api/audit',{mode:'followup',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,firstWa:first.whatsapp,count:n,speed:current.speed,services:$('services').value,voice:($('voice')||{}).value||''});
     current.first=first;current.followups=n+1;current.email=d.email;current.dm=d.dm;current.whatsapp=d.whatsapp;
-    $('subj').value=d.email?.subject||'';$('body').value=d.email?.body||'';$('dm').value=d.dm||'';$('waMsg').value=d.whatsapp||'';
+    $('subj').value=cap1(d.email?.subject);$('body').value=d.email?.body||'';$('dm').value=d.dm||'';$('waMsg').value=d.whatsapp||'';
     count();upsert(current);
     $('followMsg').textContent='Follow-up '+(n+1)+' is ready. Review it, then send or copy.';
   }catch(e){$('followMsg').textContent=e.message}
@@ -610,6 +624,8 @@ function render(){
   const now=Date.now(),main=LEADS.filter(l=>!noContact(l)),ncs=LEADS.filter(noContact);
   $('sTotal').textContent=LEADS.length;$('sContacted').textContent=LEADS.filter(l=>l.status==='Contacted').length;
   $('sSent').textContent=sentToday()+'/'+CAP;
+  {const dm=LEADS.filter(l=>l.data&&isToday(l.data.dmAt)).length,wa=LEADS.filter(l=>l.data&&isToday(l.data.waAt)).length;
+   $('sSentLbl').textContent='Emails (24h)'+(dm?' \u00b7 '+dm+' DM'+(dm>1?'s':''):'')+(wa?' \u00b7 '+wa+' WA':'')}
   $('sDue').textContent=LEADS.filter(l=>l.status==='Contacted'&&l.follow&&l.follow<=now).length;
   $('empty').hidden=main.length>0;$('more').hidden=main.length<=5;$('more').textContent='See all '+main.length+' leads';$('rows').innerHTML='';
   main.slice(0,5).forEach(l=>{
@@ -651,6 +667,7 @@ function renderNC(ncs){
   $('ncMore').hidden=ncs.length<=5;$('ncMore').textContent=ncAll?'Show fewer':'Show all '+ncs.length;$('ncMore').onclick=()=>{ncAll=!ncAll;render()};
 }
 function openFromUrl(){const u=new URLSearchParams(location.search).get('open');if(!u)return;const l=LEADS.find(x=>x.url===u);if(l&&l.data){history.replaceState(null,'',location.pathname);show(l.data)}}
+$('localize').checked=store.get('localize',true);$('localize').onchange=()=>store.set('localize',$('localize').checked);
 /* ---------- replies bell ---------- */
 let INB=[],lastUnread=-1;const CH={email:'Email',instagram:'Instagram',whatsapp:'WhatsApp',other:'Other'};
 function drawBell(n){$('bellN').hidden=!n;$('bellN').textContent=n>99?'99+':n;document.title=(n?'('+n+') ':'')+'ATM Outreach'}
@@ -688,7 +705,7 @@ $('lgSave').onclick=async()=>{
     $('lgWho').value='';$('lgMsg').value='';toast(l?'Saved. '+l.name+' marked Replied':'Saved');loadInbox()}
   catch(e){toast(e.message)}
 };
-async function loadCap(){if(!$('pw').value)return;try{const d=await call('/api/send',{op:'cap'});CAP=d.cap;render()}catch{}}
+async function loadCap(){if(!$('pw').value)return;try{const d=await call('/api/send',{op:'cap'});CAP=d.cap;USED=d.used;render()}catch{}}
 setInterval(()=>{if(!document.hidden)loadInbox()},60000);
 LEADS=store.get('leads',[]);render();openFromUrl();loadLeads();loadInbox();loadCap();
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){loadLeads();loadInbox()}});
