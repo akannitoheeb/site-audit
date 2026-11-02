@@ -68,14 +68,24 @@ export async function setStatus(url, status) {
 
 // ---- sending cap that grows as the sending domain ages ----
 const ms = (x) => (x == null ? 0 : /^\d+$/.test(String(x)) ? Number(x) : Date.parse(x) || 0);
+// Every email counts, even when one store gets 2 or 3 addresses. Uses the `sends` table; falls back to counting leads if it is missing.
 export async function sentLast24h() {
   const D = db(); if (!D) return 0;
+  try {
+    const since = new Date(Date.now() - 864e5).toISOString();
+    const r = await fetch(`${D.rest}/sends?select=id&created_at=gte.${encodeURIComponent(since)}`, { headers: { ...D.h, prefer: 'count=exact', range: '0-0' } });
+    if (r.ok) { const n = Number((r.headers.get('content-range') || '').split('/')[1]); if (!Number.isNaN(n)) return n; }
+  } catch {}
   try {
     const r = await fetch(`${D.leads}?select=emailed&emailed=not.is.null&order=emailed.desc&limit=300`, { headers: D.h });
     if (!r.ok) return 0;
     const since = Date.now() - 864e5;
     return (await r.json()).filter((l) => ms(l.emailed) >= since).length;
   } catch { return 0; }
+}
+export async function logSend(to) {
+  const D = db(); if (!D) return false;
+  try { return (await fetch(`${D.rest}/sends`, { method: 'POST', headers: { ...D.h, prefer: 'return=minimal' }, body: JSON.stringify({ to_email: String(to).toLowerCase() }) })).ok; } catch { return false; }
 }
 // SENDING_START = the date you began sending real emails from the new domain (YYYY-MM-DD). DAILY_MAX = the ceiling after week 6.
 export function dailyCap() {

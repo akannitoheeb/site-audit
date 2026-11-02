@@ -192,6 +192,34 @@ function findContacts(html, host) {
   return out;
 }
 
+// Works out what language the store is written in (page text first, the html lang tag as a backup)
+function guessLang(text, html) {
+  const W = {
+    en: 'the and for with your you our from this that are have free shipping shop all was will can',
+    es: 'el los las para con tu env\u00edo gratis tienda comprar nuestro nuestra m\u00e1s por una del que es',
+    fr: 'les des pour avec votre livraison gratuite boutique acheter notre nos plus une sur est que',
+    it: 'il gli per con tuo spedizione gratuita negozio acquista nostro nostra pi\u00f9 una del che sono',
+    de: 'der die das und f\u00fcr mit ihr versand kostenloser kaufen unsere mehr ein eine auf nicht ist',
+    pt: 'os as para com seu frete gr\u00e1tis loja comprar nosso nossa mais uma uma n\u00e3o que \u00e9',
+    nl: 'het een voor met uw verzending gratis winkel kopen onze meer van niet is zijn',
+  };
+  const NAME = { en: 'English', es: 'Spanish', fr: 'French', it: 'Italian', de: 'German', pt: 'Portuguese', nl: 'Dutch', ar: 'Arabic', ru: 'Russian' };
+  const sample = (text || '').slice(0, 4000);
+  const letters = sample.match(/\p{L}/gu) || [];
+  const share = (re) => (letters.length ? (sample.match(re) || []).length / letters.length : 0);
+  if (share(/[\u0600-\u06FF]/g) > 0.3) return { code: 'ar', name: NAME.ar };
+  if (share(/[\u0400-\u04FF]/g) > 0.3) return { code: 'ru', name: NAME.ru };
+  const words = sample.toLowerCase().match(/\p{L}+/gu) || [];
+  const score = {};
+  for (const k in W) { const set = new Set(W[k].split(' ')); score[k] = words.filter((w) => set.has(w)).length; }
+  const best = Object.keys(score).filter((k) => k !== 'en').sort((a, b) => score[b] - score[a])[0];
+  if (score[best] >= 10 && score[best] >= 1.8 * score.en) return { code: best, name: NAME[best] };
+  const hl = ((html || '').match(/<html[^>]*\blang=["']?([a-z]{2})/i) || [])[1];
+  if (hl && NAME[hl.toLowerCase()] && hl.toLowerCase() !== 'en' && score.en < 5) return { code: hl.toLowerCase(), name: NAME[hl.toLowerCase()] };
+  return { code: 'en', name: NAME.en };
+}
+const cap1 = (s) => String(s || '').replace(/^\s*\p{L}/u, (c) => c.toUpperCase());
+
 // Undoes the tricks stores use to hide an email address from robots
 function deobfuscate(html) {
   const dec = (hex) => {
@@ -526,9 +554,12 @@ Pitch logic (follow this for every draft):
 
 Return ONLY JSON in exactly this shape: {"storeName":string,"angle":string,"observations":[{"issue":string,"evidence":string,"quote":string}],"email":{"subject":string,"body":string},"dm":string,"whatsapp":string}`;
 
-  const user = `Store URL: ${target.href}
-Platform detected: ${platform}
-Hints: ${JSON.stringify(sig)}
+  const lang = guessLang(text, html);
+  const localized = lang.code !== 'en' && !(req.body && req.body.localize === false);
+  const langLine = localized
+    ? `Store language: ${lang.name}. Write the email (subject and body), the DM and the WhatsApp message in natural, polite business ${lang.name}. Also return one extra top-level field "englishEmail":{"subject":string,"body":string}, an accurate English translation of the email, so the sender can check it. Keep each observation's quote exactly as it appears on the page.\n`
+    : '';
+  const user = `Store URL: ${target.href}\nPlatform detected: ${platform}\n${langLine}Hints: ${JSON.stringify(sig)}
 My services and offers: ${services || 'Email marketing strategy and WordPress web design'}
 My writing style: ${voice || 'warm, professional, respectful'}
 Homepage text (trimmed):
@@ -567,5 +598,6 @@ Product facts (from the store's own data): ${facts ? JSON.stringify(facts) : 'no
     }
   }
   const observations = v.kept.length ? v.kept : (gen.json.observations || []).map((o) => ({ issue: o.issue, evidence: o.evidence || '', check: 'unchecked' }));
-  return res.status(200).json({ platform, signals: sig, found, provider: gen.provider, ...gen.json, observations, productFacts: facts, verification: { removed, redrafted }, contactPaths: paths, ms: Date.now() - T0 });
+  if (gen.json && gen.json.email && gen.json.email.subject) gen.json.email.subject = cap1(gen.json.email.subject);
+  return res.status(200).json({ lang: { ...lang, localized }, platform, signals: sig, found, provider: gen.provider, ...gen.json, observations, productFacts: facts, verification: { removed, redrafted }, contactPaths: paths, ms: Date.now() - T0 });
 }

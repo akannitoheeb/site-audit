@@ -1,6 +1,6 @@
 // POST /api/send  { to, subject, body, withLink }   or   { op: 'cap' } to read today's limit
 // Header: x-app-password
-import { suppressedReason, sentLast24h, dailyCap } from './_db.js';
+import { suppressedReason, sentLast24h, dailyCap, logSend } from './_db.js';
 
 const WHY = {
   bounced: 'This address bounced before, so it is blocked to protect your sender reputation.',
@@ -17,7 +17,8 @@ export default async function handler(req, res) {
   const cap = dailyCap(), used = await sentLast24h();
   if (req.body?.op === 'cap') return res.status(200).json({ cap, used });
 
-  const { to, subject, body, withLink } = req.body || {};
+  const { to, body, withLink } = req.body || {};
+  const subject = String((req.body || {}).subject || '').trim().replace(/^\p{L}/u, (c) => c.toUpperCase()); // first letter always capital
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to || '') || !subject || !body)
     return res.status(400).json({ error: 'Add a valid email, subject, and message.' });
   if (used >= cap)
@@ -45,5 +46,6 @@ export default async function handler(req, res) {
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) return res.status(502).json({ error: data?.message || 'Email failed to send' });
-  return res.status(200).json({ ok: true });
+  await logSend(to);
+  return res.status(200).json({ ok: true, used: used + 1, cap });
 }
