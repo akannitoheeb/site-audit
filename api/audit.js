@@ -235,6 +235,8 @@ function deobfuscate(html) {
     .replace(/\s*[\[\(\{]\s*dot\s*[\]\)\}]\s*/gi, '.');
 }
 
+const langRule = (l) => (l && l !== 'English' ? `\nLanguage: write the whole output in ${String(l).slice(0, 20)}, natural and polite. Do not write in English.` : '');
+
 async function postRetry(url, opts, tries = 2) {
   let r;
   const ms = url.includes('groq.com') ? 15000 : 22000; // a stuck AI call must give up so the backup provider can run
@@ -363,6 +365,7 @@ Rules:
 - If they decline or ask you to stop: thank them politely, confirm you will not message again, and do not pitch.
 - If it is unclear: ask ONE short question.
 - Claims about their store only from the observations given.
+${langRule(b.lang)}
 Return ONLY JSON: {"intent":"interested"|"question"|"declined"|"unclear","subject":string,"body":string}`;
     const usr = `Store: ${b.name} (${b.url})
 My services: ${b.services || 'Email marketing strategy and WordPress web design'}
@@ -391,6 +394,7 @@ Rules:
 - Email: under 70 words. DM: under 45 words. WhatsApp: under 60 words. Simple English, no emojis.
 - ${n >= 1 ? 'This is the last follow-up: close politely and leave the door open.' : 'This is the first follow-up.'}
 ${b.voice ? 'Writing style: ' + b.voice : ''}
+${langRule(b.lang)}
 Return ONLY JSON: {"email":{"subject":string,"body":string},"dm":string,"whatsapp":string}`;
     const usr = `Store: ${b.name} (${b.url})
 My services: ${b.services || 'Email marketing strategy and WordPress web design'}
@@ -415,7 +419,7 @@ Speed test (Google PageSpeed, mobile): ${b.speed ? `score ${b.speed.score} of 10
       dm: 'Write ONE Instagram or social DM. 45 to 70 words. Greet properly, name ONE specific thing you saw on this store, then ask one easy question or offer one quick helpful idea. No links, no emojis.',
       whatsapp: 'Write ONE WhatsApp message. 60 to 90 words. The store does not know this number, so greet properly, then introduce yourself in one line ("This is Toheeb from ATM. I help online stores with email marketing and website design."). Name ONE specific thing you saw, make ONE ask, then add a courteous line saying they can simply tell you if they would rather not be messaged. Close with "Kind regards, Toheeb", then on a new line "Portfolio: toheebakanni.name.ng". No other links, no emojis.',
     };
-    const SHAPE = { email: '{"email":{"subject":string,"body":string}}', dm: '{"dm":string}', whatsapp: '{"whatsapp":string}' };
+    const SHAPE = { email: '{"email":{"subject":string,"body":string}' + (b.lang && b.lang !== 'English' ? ',"englishEmail":{"subject":string,"body":string}' : '') + '}', dm: '{"dm":string}', whatsapp: '{"whatsapp":string}' };
     const cur = kind === 'email' ? `${b.current?.email?.subject || ''}\n${b.current?.email?.body || ''}` : String(b.current?.[kind] || '');
     const sys = `You rewrite outreach for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM).
 ${TONE}
@@ -426,6 +430,7 @@ Rules:
 - Make exactly ONE ask. Never use the word "free".
 - Write a clearly different version from the current draft: a different opening and different sentence shapes, but the same facts and the same offer.
 ${b.voice ? 'Writing style: ' + String(b.voice).slice(0, 300) : ''}
+${langRule(b.lang)}
 Return ONLY JSON in exactly this shape: ${SHAPE[kind]}`;
     const wcount = (t) => String(t || '').trim().split(/\s+/).filter(Boolean).length;
     const lint = (j) => {
@@ -435,7 +440,7 @@ Return ONLY JSON in exactly this shape: ${SHAPE[kind]}`;
       if (!String(body || '').trim()) return ['the draft was empty'];
       if (/[$€£%]/.test(text)) p.push('remove every money, currency and percent sign');
       if (/https?:\/\/|www\./i.test(text)) p.push('remove links');
-      const bad = AVOID.split(', ').filter((w) => new RegExp('\\b' + w.replace(/[-]/g, '[- ]?') + '\\b', 'i').test(text));
+      const bad = (b.lang && b.lang !== 'English' ? [] : AVOID.split(', ')).filter((w) => new RegExp('\\b' + w.replace(/[-]/g, '[- ]?') + '\\b', 'i').test(text));
       if (bad.length) p.push('do not use these words: ' + bad.join(', '));
       if (kind === 'email') {
         if (text.includes('!')) p.push('remove exclamation marks');
@@ -511,6 +516,11 @@ ${b.problems ? 'Problems found in the current draft that the new one must NOT ha
   const text = toText(html);
   const { productText, stock, facts } = prod;
 
+  const lang = guessLang(text, html);
+  const localized = lang.code !== 'en' && !(req.body && req.body.localize === false);
+  const langLine = localized
+    ? `Store language: ${lang.name}. Write the email (subject and body), the DM and the WhatsApp message in natural, polite business ${lang.name}. Also return one extra top-level field "englishEmail":{"subject":string,"body":string}, an accurate English translation of the email, so the sender can check it. The email, dm and whatsapp fields must all be filled in. Keep each observation's quote exactly as it appears on the page.\n`
+    : '';
   const system = `You write outreach for Toheeb Akanni, a freelance email marketing strategist and WordPress web designer (brand: ATM, Akanni Toheeb Marketing).
 You audit an online store from the evidence given and draft personal outreach.
 
@@ -552,13 +562,8 @@ Pitch logic (follow this for every draft):
 6. A product page excerpt may be included. Comment on product descriptions only if that excerpt is there.
 7. Before answering, check the draft: is every fact visible in the evidence, is there one ask, and would a stranger understand the point in 5 seconds? Fix it if not.
 
-Return ONLY JSON in exactly this shape: {"storeName":string,"angle":string,"observations":[{"issue":string,"evidence":string,"quote":string}],"email":{"subject":string,"body":string},"dm":string,"whatsapp":string}`;
+Return ONLY JSON in exactly this shape: {"storeName":string,"angle":string,"observations":[{"issue":string,"evidence":string,"quote":string}],"email":{"subject":string,"body":string},"dm":string,"whatsapp":string${localized ? ',"englishEmail":{"subject":string,"body":string}' : ''}}`;
 
-  const lang = guessLang(text, html);
-  const localized = lang.code !== 'en' && !(req.body && req.body.localize === false);
-  const langLine = localized
-    ? `Store language: ${lang.name}. Write the email (subject and body), the DM and the WhatsApp message in natural, polite business ${lang.name}. Also return one extra top-level field "englishEmail":{"subject":string,"body":string}, an accurate English translation of the email, so the sender can check it. Keep each observation's quote exactly as it appears on the page.\n`
-    : '';
   const user = `Store URL: ${target.href}\nPlatform detected: ${platform}\n${langLine}Hints: ${JSON.stringify(sig)}
 My services and offers: ${services || 'Email marketing strategy and WordPress web design'}
 My writing style: ${voice || 'warm, professional, respectful'}
