@@ -268,9 +268,10 @@ $('tSingle').onclick=()=>mode(false);$('tBulk').onclick=()=>mode(true);
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
 function setStep(n){[...$('steps').children].forEach((li,i)=>{li.className=i<n?'done':i===n?'on':''})}
 const SPAM_RE=/\b(free|guarantee[ds]?|risk-?free|no obligation|act now|limited time|urgent|click here|buy now|exclusive|amazing|incredible|game-?changer|revolutionary|boost\w*|skyrocket\w*|supercharge\w*|dominat\w*|unlock\w*|leverag\w*|synerg\w*|elevat\w*|streamlin\w*|enhanc\w*|optimi[sz]\w*|maximi[sz]\w*|transform\w*|refin\w*|cutting-?edge|state-of-the-art|best-in-class|world-class|nurtur\w*|funnel\w*|engagement|customer journey|brand voice|increase your sales)\b/gi;
+function langName(){return current&&current.lang&&current.lang.localized?current.lang.name:''}
 function spamCheck(){
   const subj=$('subj').value,body=$('body').value,t=subj+' '+body,notes=[];
-  const words=[...new Set((t.match(SPAM_RE)||[]).map(w=>w.toLowerCase()))];
+  const words=langName()?[]:[...new Set((t.match(SPAM_RE)||[]).map(w=>w.toLowerCase()))];
   if(words.length)notes.push('replace these words: '+words.join(', '));
   if(t.includes('!'))notes.push('remove exclamation marks');
   if(/https?:\/\/|www\./i.test(t))notes.push('remove links from a first email');
@@ -451,10 +452,10 @@ async function rewrite(kind){
   store.set('pw',$('pw').value);
   $(r.btn).disabled=true;$(r.btn).textContent='Rewriting...';$(r.msg).textContent='';
   try{
-    const d=await call('/api/audit',{mode:'rewrite',kind,name:current.storeName||current.url,url:current.url,observations:current.observations,
+    const d=await call('/api/audit',{mode:'rewrite',lang:langName(),kind,name:current.storeName||current.url,url:current.url,observations:current.observations,
       current:{email:current.email,dm:current.dm,whatsapp:current.whatsapp},problems:kind==='email'?($('spamNote').dataset.issues||''):'',speed:current.speed,services:$('services').value,voice:$('voice').value,localize:$('localize').checked});
     OLD[kind]={subj:$('subj').value,body:$('body').value,dm:$('dm').value,wa:$('waMsg').value};
-    if(kind==='email'){if(!d.email||!d.email.body)throw new Error('The rewrite came back empty. Try again.');$('subj').value=d.email.subject||$('subj').value;$('body').value=d.email.body}
+    if(kind==='email'){if(!d.email||!d.email.body)throw new Error('The rewrite came back empty. Try again.');$('subj').value=d.email.subject||$('subj').value;$('body').value=d.email.body;if(d.englishEmail&&d.englishEmail.body){current.englishEmail=d.englishEmail;showLang(current)}else $('enBox').hidden=true}
     else if(kind==='dm'){if(!d.dm)throw new Error('The rewrite came back empty. Try again.');$('dm').value=d.dm}
     else{if(!d.whatsapp)throw new Error('The rewrite came back empty. Try again.');$('waMsg').value=d.whatsapp}
     sync();upsert(current);count();
@@ -465,7 +466,7 @@ async function rewrite(kind){
 Object.keys(RW).forEach(k=>{
   $(RW[k].btn).onclick=()=>rewrite(k);
   $(RW[k].undo).onclick=()=>{const o=OLD[k];if(!o)return;
-    if(k==='email'){$('subj').value=o.subj;$('body').value=o.body}else if(k==='dm')$('dm').value=o.dm;else $('waMsg').value=o.wa;
+    if(k==='email'){$('subj').value=o.subj;$('body').value=o.body;$('enBox').hidden=true}else if(k==='dm')$('dm').value=o.dm;else $('waMsg').value=o.wa;
     sync();upsert(current);count();$(RW[k].undo).hidden=true;$(RW[k].msg).textContent='Old version restored.'}
 });
 $('followBtn').onclick=async()=>{
@@ -475,7 +476,7 @@ $('followBtn').onclick=async()=>{
   if(n>=2){$('followMsg').textContent='Two follow-ups is enough. Move on to the next store.';return}
   $('followBtn').disabled=true;$('followMsg').textContent='Writing...';
   try{
-    const d=await call('/api/audit',{mode:'followup',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,firstWa:first.whatsapp,count:n,speed:current.speed,services:$('services').value,voice:($('voice')||{}).value||''});
+    const d=await call('/api/audit',{mode:'followup',lang:langName(),name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:first.email,firstDm:first.dm,firstWa:first.whatsapp,count:n,speed:current.speed,services:$('services').value,voice:($('voice')||{}).value||''});
     current.first=first;current.followups=n+1;current.email=d.email;current.dm=d.dm;current.whatsapp=d.whatsapp;
     $('subj').value=cap1(d.email?.subject);$('body').value=d.email?.body||'';$('dm').value=d.dm||'';$('waMsg').value=d.whatsapp||'';
     count();upsert(current);
@@ -566,7 +567,7 @@ $('replyBtn').onclick=async()=>{
   current.first=current.first||{email:current.email,dm:current.dm,whatsapp:current.whatsapp};
   $('replyBtn').disabled=true;$('replyMsg').textContent='Writing...';
   try{
-    const d=await call('/api/audit',{mode:'reply',name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:current.first.email,theirReply:txt,services:$('services').value});
+    const d=await call('/api/audit',{mode:'reply',lang:langName(),name:current.storeName||current.url,url:current.url,observations:current.observations,firstEmail:current.first.email,theirReply:txt,services:$('services').value});
     $('subj').value=d.subject||('Re: '+((current.first.email||{}).subject||''));$('body').value=d.body||'';count();
     current.email={subject:$('subj').value,body:$('body').value};
     upsert(current,d.intent==='declined'?undefined:'Replied');
