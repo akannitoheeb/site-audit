@@ -121,6 +121,11 @@ function detect(html) {
   return 'Unknown';
 }
 
+// Email service providers: their scripts or form addresses show up in the page code
+const ESP_TOOLS = ['klaviyo', 'mailchimp', 'list-manage.com', 'omnisend', 'mailerlite', 'sendinblue', 'brevo', 'convertkit', 'flodesk', 'beehiiv', 'aweber', 'getresponse', 'activecampaign', 'constantcontact', 'campaign-monitor', 'createsend', 'moosend', 'sendlane', 'drip.com', 'getdrip', 'hsforms', 'hs-scripts', 'postscript.io', 'attn.tv', 'attentivemobile', 'smsbump', 'yotpo', 'listrak', 'seguno', 'shopify-forms', 'shopifyforms'];
+// Popup and signup-form builders (the popup itself is invisible to us)
+const POPUP_TOOLS = ['privy.com', 'privy-', 'justuno', 'optinmonster', 'popupsmart', 'wheelio', 'sumo.com', 'sumome', 'hellobar', 'spin-a-sale', 'spinwheel', 'convertflow', 'poptin', 'getsitecontrol', 'wisepops', 'picreel', 'smartrmail', 'mailmunch', 'sleeknote', 'zotabox'];
+
 function signals(html) {
   const h = html.toLowerCase();
   const has = (...k) => k.some((x) => h.includes(x));
@@ -128,7 +133,9 @@ function signals(html) {
     title: (html.match(/<title[^>]*>([^<]*)/i) || [])[1]?.trim() || null,
     metaDescription: /<meta[^>]+name=["']description["']/i.test(html),
     mobileViewportTag: /name=["']viewport["']/i.test(html),
-    emailToolDetected: has('klaviyo', 'mailchimp', 'omnisend', 'mailerlite', 'sendinblue', 'brevo', 'convertkit'),
+    // Email apps and popup apps. Popups load with JavaScript, so we can only spot the app's script, never the popup itself.
+    emailToolDetected: has(...ESP_TOOLS, ...POPUP_TOOLS),
+    popupToolDetected: has(...POPUP_TOOLS),
     newsletterOrSubscribeText: has('newsletter', 'subscribe', 'join our list'),
     emailSignupFormDetected: /<input[^>]+type=["']email["']/i.test(html) || has('contact[email]', 'klaviyo-form', 'needsclick', 'mc-embedded-subscribe'),
     runsAds: has('connect.facebook.net/en_us/fbevents', 'fbq(', 'googleadservices', 'gtag/js?id=aw-', 'analytics.tiktok'),
@@ -269,6 +276,19 @@ function verifyObs(list, corpus) {
     else dropped++;
   }
   return { kept, dropped };
+}
+
+// Safety net: even if the AI ignores the rules, drop points about things we cannot see.
+const INCENTIVE_CLAIM = /incentive|discount|welcome offer|first[- ](order|purchase)|reason to (sign|subscribe|join)|benefit (for|to) (new )?subscribers|what (they|you|the store) offers? (for|in return)|offer(s|ing)? (for|to) (new )?(subscribers|sign)/i;
+const MISSING_CAPTURE = /(could not find|can't find|cannot find|couldn't find|no |not find|without|lacks?|missing).{0,70}(sign-?up|subscribe|subscription|email list|mailing list|newsletter|email capture|join)/i;
+function dropUnseeable(list, sig) {
+  const hasTool = !!(sig && (sig.emailToolDetected || sig.popupToolDetected));
+  const kept = [], dropped = [];
+  for (const o of list) {
+    const t = `${o.issue} ${o.evidence || ''}`;
+    (INCENTIVE_CLAIM.test(t) || (hasTool && MISSING_CAPTURE.test(t)) ? dropped : kept).push(o);
+  }
+  return { kept, dropped: dropped.length };
 }
 
 async function askGemini(system, user, key) {
@@ -534,7 +554,8 @@ Evidence rules (most important):
 
 - You only see flattened text: paragraph breaks, bullets, headings, fonts, colours, spacing, images, layout and how a page looks or reads on mobile are lost. NEVER make claims about the homepage's formatting, layout, design, visual appearance or readability. The only exception is the product description, and only through the "Product facts" line, which comes from the store's own data: say the description is one block of text only if oneBlock is true; mention missing bullet points only if bulletItems is 0 and oneBlock is true; image and variant counts are allowed. If Product facts say not available, make no formatting claims at all.
 - NEVER mention announcement bars, top banners, tickers or placeholder or default theme text (for example "Welcome to our store", "Lorem ipsum", "Your text here"). Themes keep this text in the page code even when visitors never see it, so you cannot tell what is really shown.
-- "emailSignupFormDetected: true" means an email field exists in the homepage code. Then NEVER say the store has no signup form, newsletter form or email capture. You may only suggest improving what they offer in return for the email. If it is false, you still cannot be sure (popups and embedded forms load later), so NEVER state that the store has no signup or email capture. Write the observation as what you could not find, for example issue "Could not find a way to join the email list on the homepage" with evidence "No signup form appears in the page code, though a popup may load later." In every draft, turn it into a question such as "I could not find a way to join your email list on the homepage. Did I miss one?" and then make the one offer (for example sketching a short welcome email).
+- You can NEVER see popups, slide-ins, spin wheels, exit-intent offers or any signup offer that loads with JavaScript. Most stores show their email offer (for example a first-order discount) in exactly that way. So NEVER comment on what a store offers in return for an email, on whether it has a discount or incentive, or on how good its signup offer is. Do not raise it in the observations or in any draft.
+- "emailSignupFormDetected: true" means an email field exists in the homepage code. Then NEVER say the store has no signup form, newsletter form or email capture. "emailToolDetected: true" or "popupToolDetected: true" means the store almost certainly runs a popup or email tool: then do not raise email capture as a gap at all, and pitch something else you can see (product copy, trust, page clarity), or a welcome or abandoned-cart email flow phrased as an offer, never as a problem. If both are false you still cannot be sure, so NEVER state that the store has no signup or email capture. Write the observation as what you could not find, for example issue "Could not find a way to join the email list on the homepage" with evidence "No signup form appears in the page code, though a popup may load later." In every draft, turn it into a question such as "I could not find a way to join your email list on the homepage. Did I miss one?" and then make the one offer (for example sketching a short welcome email).
 - Words such as "Sold out", "Sale", "Unavailable" or "Variant sold out" often sit in hidden template text on a page even when the item is in stock. NEVER say a product is sold out, out of stock or unavailable unless the "Stock check" line says SOLD OUT. If it says IN STOCK, or "not checked", do not mention stock at all.
 
 - Quotes: for every observation about something the page says or shows, put 3 to 12 consecutive words copied EXACTLY from the homepage text or the product page text into "quote". For an observation about something missing or not found, or one based on Product facts, set "quote" to an empty string. Never invent, translate or reword a quote.
@@ -592,17 +613,18 @@ Product facts (from the store's own data): ${facts ? JSON.stringify(facts) : 'no
   let gen = await generate('');
   if (!gen.ok) return res.status(502).json({ error: gen.error });
   const corpus = text + ' ' + productText;
-  let v = verifyObs(gen.json.observations, corpus), redrafted = false;
+  const dropU = (x) => { const r = dropUnseeable(x.kept, sig); return { kept: r.kept, dropped: x.dropped + r.dropped }; };
+  let v = dropU(verifyObs(gen.json.observations, corpus)), redrafted = false;
   const removed = v.dropped;
   if (removed > 0 && v.kept.length && Date.now() - T0 < 35000) {
     // Some points could not be matched to the page. Rewrite the drafts using only the points that could.
     const again = await generate(`\n\nIMPORTANT: ${removed} earlier point(s) were removed because their quotes were not found on the page. Write ALL drafts using ONLY these verified points and mention nothing else about the store:\n${JSON.stringify(v.kept.map((k) => ({ issue: k.issue, evidence: k.evidence })))}`);
     if (again.ok) {
-      const v2 = verifyObs(again.json.observations, corpus);
+      const v2 = dropU(verifyObs(again.json.observations, corpus));
       if (v2.kept.length) { gen = again; v = v2; redrafted = true; }
     }
   }
-  const observations = v.kept.length ? v.kept : (gen.json.observations || []).map((o) => ({ issue: o.issue, evidence: o.evidence || '', check: 'unchecked' }));
+  const observations = v.kept.length ? v.kept : dropUnseeable((gen.json.observations || []).filter((o) => o && o.issue).map((o) => ({ issue: o.issue, evidence: o.evidence || '', check: 'unchecked' })), sig).kept;
   if (gen.json && gen.json.email && gen.json.email.subject) gen.json.email.subject = cap1(gen.json.email.subject);
   return res.status(200).json({ lang: { ...lang, localized }, platform, signals: sig, found, provider: gen.provider, ...gen.json, observations, productFacts: facts, verification: { removed, redrafted }, contactPaths: paths, ms: Date.now() - T0 });
 }
