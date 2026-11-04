@@ -313,8 +313,9 @@ function show(c){
   $('storeLink').href=c.url;$('storeLink').textContent=c.url.replace(/^https?:\/\//,'').replace(/\/$/,'')+' ↗';
   $('chips').innerHTML='';
   chip(c.platform,'neu');
-  chip(s.emailToolDetected?'Email tool found':'No email tool found',s.emailToolDetected?'ok':'bad');
-  chip(s.newsletterOrSubscribeText?'Subscribe text found':'No subscribe text',s.newsletterOrSubscribeText?'ok':'bad');
+  chip(s.emailToolDetected?(s.popupToolDetected?'Popup tool found':'Email tool found'):'No known email tool in page code',s.emailToolDetected?'ok':'neu');
+  chip(s.newsletterOrSubscribeText?'Subscribe text found':'No subscribe text in page code',s.newsletterOrSubscribeText?'ok':'neu');
+  if(!s.emailToolDetected){const w=document.createElement('span');w.className='chip neu';w.title='Popups load with JavaScript, so this audit cannot see them. Open the store yourself before you trust this.';w.textContent='Popups are not visible to this audit';$('chips').appendChild(w)}
   chip(s.mobileViewportTag?'Mobile ready':'No mobile tag',s.mobileViewportTag?'ok':'bad');
   chip((s.pageSizeKB||0)+' KB homepage','neu');
   if(c.provider)chip('Written by '+(c.provider==='groq'?'Groq (backup)':'Gemini'),'neu');
@@ -505,7 +506,7 @@ $('reauditBtn').onclick=async()=>{
 function score(l){const d=l.data||{},f=d.found||{},s=d.signals||{};let n=0;
   const em=String(d.to||f.email||'');if(em)n+=HELP_RE.test(em.split('@')[0].replace(/\+.*$/,''))?1:3;
   if(d.phone||f.phone)n++;if(d.profile||f.instagram)n++;
-  if(s.emailToolDetected===false)n+=2;if(s.emailSignupFormDetected===false)n++;
+  if(s.emailToolDetected===false&&!s.popupToolDetected){n+=1;if(s.emailSignupFormDetected===false)n++}
   if(/shopify|woocommerce/i.test(d.platform||''))n++;
   if((d.observations||[]).length>=3)n++;
   if(d.speed&&d.speed.score<50)n++;
